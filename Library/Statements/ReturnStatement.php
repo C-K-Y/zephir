@@ -31,6 +31,11 @@ class ReturnStatement
 		$this->_statement = $statement;
 	}
 
+	/**
+	 *
+	 *
+	 * @param \CompilationContext $compilationContext
+	 */
 	public function compile(CompilationContext $compilationContext)
 	{
 
@@ -38,93 +43,108 @@ class ReturnStatement
 
 		$codePrinter = $compilationContext->codePrinter;
 
-		$codePrinter->outputBlankLine(true);
+		if (isset($statement['expr'])) {
 
-		/**
-		 * Use return member for properties on this
-		 */
-		if ($statement['expr']['type'] == 'property-access') {
-			if ($statement['expr']['left']['type'] == 'variable') {
-				if ($statement['expr']['left']['value'] == 'this') {
-					if ($statement['expr']['right']['type'] == 'variable') {
+			/**
+			 * Use return member for properties on this
+			 */
+			if ($statement['expr']['type'] == 'property-access') {
+				if ($statement['expr']['left']['type'] == 'variable') {
+					if ($statement['expr']['left']['value'] == 'this') {
+						if ($statement['expr']['right']['type'] == 'variable') {
 
-						/**
-						 * If the property is accessed on 'this', we check if the property does exist
-						 */
-						$property = $statement['expr']['right']['value'];
-						$classDefinition = $compilationContext->classDefinition;
-						if (!$classDefinition->hasProperty($property)) {
-							throw new CompilerException("Class '" . $classDefinition->getCompleteName() . "' does not have a property called: '" . $property . "'", $statement['expr']['right']);
+							/**
+							 * If the property is accessed on 'this', we check if the property does exist
+							 */
+							$property = $statement['expr']['right']['value'];
+							$classDefinition = $compilationContext->classDefinition;
+							if (!$classDefinition->hasProperty($property)) {
+								throw new CompilerException("Class '" . $classDefinition->getCompleteName() . "' does not have a property called: '" . $property . "'", $statement['expr']['right']);
+							}
+
+							$compilationContext->headersManager->add('kernel/object');
+							$codePrinter->output('RETURN_MEMBER(this_ptr, "' . $property . '");');
+							return;
 						}
-
-						$codePrinter->output('RETURN_MEMBER(this_ptr, "' . $property . '");');
-						return;
 					}
 				}
 			}
-		}
 
-		$variable = $compilationContext->symbolTable->getVariable('return_value');
+			$variable = $compilationContext->symbolTable->getVariable('return_value');
 
-		$expr = new Expression($statement['expr']);
-		$expr->setExpectReturn(true, $variable);
-		$resolvedExpr = $expr->compile($compilationContext);
+			$expr = new Expression($statement['expr']);
+			$expr->setExpectReturn(true, $variable);
+			$resolvedExpr = $expr->compile($compilationContext);
 
-		switch ($resolvedExpr->getType()) {
-			case 'int':
-				$codePrinter->output('RETURN_MM_LONG(' . $resolvedExpr->getCode() . ');');
-				break;
-			case 'bool':
-				$codePrinter->output('RETURN_MM_BOOL(' . $resolvedExpr->getBooleanCode() . ');');
-				break;
-			case 'double':
-				$codePrinter->output('RETURN_MM_DOUBLE(' . $resolvedExpr->getCode() . ');');
-				break;
-			case 'string':
-				$codePrinter->output('RETURN_MM_STRING("' . $resolvedExpr->getCode() . '", 1);');
-				break;
-			case 'variable':
-				$symbolVariable = $compilationContext->symbolTable->getVariableForRead($resolvedExpr->getCode(), $compilationContext, $statement['expr']);
-				switch ($symbolVariable->getType()) {
-					case 'int':
-						$codePrinter->output('RETURN_MM_LONG(' . $symbolVariable->getName() . ');');
-						break;
-					case 'double':
-						$codePrinter->output('RETURN_MM_DOUBLE(' . $symbolVariable->getName() . ');');
-						break;
-					case 'string':
-						$codePrinter->output('RETURN_MM_STRING(' . $resolvedExpr->getCode() . '->str, 1);');
-						break;
-					case 'bool':
-						$codePrinter->output('RETURN_MM_BOOL(' . $symbolVariable->getName() . ');');
-						break;
-					case 'variable':
-						if ($symbolVariable->getName() == 'this_ptr') {
-							$codePrinter->output('RETURN_THIS();');
-						} else {
-							if ($symbolVariable->getName() != 'return_value') {
-								if ($symbolVariable->isLocalOnly()) {
-									$codePrinter->output('RETURN_CCTOR(&' . $symbolVariable->getName() . ');');
-								} else {
-									$codePrinter->output('RETURN_CCTOR(' . $symbolVariable->getName() . ');');
-								}
+			switch ($resolvedExpr->getType()) {
+				case 'int':
+				case 'uint':
+				case 'long':
+				case 'char':
+				case 'uchar':
+					$codePrinter->output('RETURN_MM_LONG(' . $resolvedExpr->getCode() . ');');
+					break;
+				case 'bool':
+					$codePrinter->output('RETURN_MM_BOOL(' . $resolvedExpr->getBooleanCode() . ');');
+					break;
+				case 'double':
+					$codePrinter->output('RETURN_MM_DOUBLE(' . $resolvedExpr->getCode() . ');');
+					break;
+				case 'string':
+					$codePrinter->output('RETURN_MM_STRING("' . $resolvedExpr->getCode() . '", 1);');
+					break;
+				case 'variable':
+					$symbolVariable = $compilationContext->symbolTable->getVariableForRead($resolvedExpr->getCode(), $compilationContext, $statement['expr']);
+					switch ($symbolVariable->getType()) {
+						case 'int':
+						case 'uint':
+						case 'long':
+						case 'char':
+						case 'uchar':
+							$codePrinter->output('RETURN_MM_LONG(' . $symbolVariable->getName() . ');');
+							break;
+						case 'double':
+							$codePrinter->output('RETURN_MM_DOUBLE(' . $symbolVariable->getName() . ');');
+							break;
+						case 'string':
+							$codePrinter->output('RETURN_MM_STRING(' . $resolvedExpr->getCode() . '->str, 1);');
+							break;
+						case 'bool':
+							$codePrinter->output('RETURN_MM_BOOL(' . $symbolVariable->getName() . ');');
+							break;
+						case 'variable':
+							if ($symbolVariable->getName() == 'this_ptr') {
+								$codePrinter->output('RETURN_THIS();');
 							} else {
-								$codePrinter->output('return;');
+								if ($symbolVariable->getName() != 'return_value') {
+									if ($symbolVariable->isLocalOnly()) {
+										$codePrinter->output('RETURN_CCTOR(&' . $symbolVariable->getName() . ');');
+									} else {
+										$codePrinter->output('RETURN_CCTOR(' . $symbolVariable->getName() . ');');
+									}
+								} else {
+									$codePrinter->output('RETURN_MM();');
+								}
 							}
-						}
-						break;
-					default:
-						throw new CompilerException("Cannot return variable '" . $symbolVariable->getType() . "'", $statement['expr']);
-				}
-				break;
-			case 'null':
-				$codePrinter->output('RETURN_MM_NULL();');
-				break;
-			default:
-				throw new CompilerException("Cannot return '" . $resolvedExpr->getType() . "'", $statement['expr']);
+							break;
+						default:
+							throw new CompilerException("Cannot return variable '" . $symbolVariable->getType() . "'", $statement['expr']);
+					}
+					break;
+				case 'null':
+					$codePrinter->output('RETURN_MM_NULL();');
+					break;
+				default:
+					throw new CompilerException("Cannot return '" . $resolvedExpr->getType() . "'", $statement['expr']);
+			}
+
+			return;
 		}
 
-		$codePrinter->outputBlankLine(true);
+		/**
+		 * Return without an expression
+		 */
+		$codePrinter->output('RETURN_MM_NULL();');
 	}
 
 }

@@ -16,6 +16,7 @@
  +----------------------------------------------------------------------+
 */
 
+#include "stdio.h"
 #include "string.h"
 #include "scanner.h"
 
@@ -86,6 +87,12 @@ int xx_get_token(xx_scanner_state *s, xx_scanner_token *token) {
 			return 0;
 		}
 
+		'interface' {
+			s->active_char += sizeof("interface")-1;
+			token->opcode = XX_T_INTERFACE;
+			return 0;
+		}
+
 		'class' {
 			s->active_char += sizeof("class")-1;
 			token->opcode = XX_T_CLASS;
@@ -95,6 +102,12 @@ int xx_get_token(xx_scanner_state *s, xx_scanner_token *token) {
 		'extends' {
 			s->active_char += sizeof("extends")-1;
 			token->opcode = XX_T_EXTENDS;
+			return 0;
+		}
+
+		'implements' {
+			s->active_char += sizeof("implements")-1;
+			token->opcode = XX_T_IMPLEMENTS;
 			return 0;
 		}
 
@@ -254,6 +267,12 @@ int xx_get_token(xx_scanner_state *s, xx_scanner_token *token) {
 			return 0;
 		}
 
+		'do' {
+			s->active_char += sizeof("do")-1;
+			token->opcode = XX_T_DO;
+			return 0;
+		}
+
 		'while' {
 			s->active_char += sizeof("while")-1;
 			token->opcode = XX_T_WHILE;
@@ -281,6 +300,12 @@ int xx_get_token(xx_scanner_state *s, xx_scanner_token *token) {
 		'return' {
 			s->active_char += sizeof("return")-1;
 			token->opcode = XX_T_RETURN;
+			return 0;
+		}
+
+		'require' {
+			s->active_char += sizeof("require")-1;
+			token->opcode = XX_T_REQUIRE;
 			return 0;
 		}
 
@@ -364,7 +389,7 @@ int xx_get_token(xx_scanner_state *s, xx_scanner_token *token) {
 
 		SCHAR = (['] ([\\][']|[\\].|[\001-\377]\[\\'])* [']);
 		SCHAR {
-			token->opcode = XX_T_SCHAR;
+			token->opcode = XX_T_CHAR;
 			token->value = strndup(q, YYCURSOR - q - 1);
 			token->len = YYCURSOR - q - 1;
 			s->active_char += (YYCURSOR - start);
@@ -403,12 +428,18 @@ int xx_get_token(xx_scanner_state *s, xx_scanner_token *token) {
 			return 0;
 		}
 
-		IDENTIFIER = [\\\_]?[\_a-zA-Z\\][a-zA-Z0-9\_\\]*;
+		IDENTIFIER = [\\_\$]?[\_a-zA-Z\\][a-zA-Z0-9\_\\]*;
 		IDENTIFIER {
 
-			token->value = strndup(start, YYCURSOR - start);
-			token->len = YYCURSOR - start;
-			s->active_char += (YYCURSOR - start);
+			if (start[0] == '$') {
+				token->value = strndup(start + 1, YYCURSOR - start - 1);
+				token->len = YYCURSOR - start - 1;
+				s->active_char += (YYCURSOR - start - 1);
+			} else {
+				token->value = strndup(start, YYCURSOR - start);
+				token->len = YYCURSOR - start;
+				s->active_char += (YYCURSOR - start);
+			}
 			q = YYCURSOR;
 
 			if (!memcmp(token->value, "_GET", sizeof("_GET")-1)) {
@@ -421,7 +452,17 @@ int xx_get_token(xx_scanner_state *s, xx_scanner_token *token) {
 				return 0;
 			}
 
+			if (!memcmp(token->value, "_REQUEST", sizeof("_REQUEST")-1)) {
+				token->opcode = XX_T_IDENTIFIER;
+				return 0;
+			}
+
 			if (!memcmp(token->value, "_SERVER", sizeof("_SERVER")-1)) {
+				token->opcode = XX_T_IDENTIFIER;
+				return 0;
+			}
+
+			if (!memcmp(token->value, "_SESSION", sizeof("_SESSION")-1)) {
 				token->opcode = XX_T_IDENTIFIER;
 				return 0;
 			}
@@ -612,6 +653,24 @@ int xx_get_token(xx_scanner_state *s, xx_scanner_token *token) {
 		"-" {
 			s->active_char++;
 			token->opcode = XX_T_SUB;
+			return 0;
+		}
+
+		"*" {
+			s->active_char++;
+			token->opcode = XX_T_MUL;
+			return 0;
+		}
+
+		"/" {
+			s->active_char++;
+			token->opcode = XX_T_DIV;
+			return 0;
+		}
+
+		"%" {
+			s->active_char++;
+			token->opcode = XX_T_MOD;
 			return 0;
 		}
 

@@ -47,6 +47,7 @@ require ZEPHIRPATH . 'Library/Statements/DeclareStatement.php';
 require ZEPHIRPATH . 'Library/Statements/ReturnStatement.php';
 require ZEPHIRPATH . 'Library/Statements/IfStatement.php';
 require ZEPHIRPATH . 'Library/Statements/LoopStatement.php';
+require ZEPHIRPATH . 'Library/Statements/DoWhileStatement.php';
 require ZEPHIRPATH . 'Library/Statements/WhileStatement.php';
 require ZEPHIRPATH . 'Library/Statements/SwitchStatement.php';
 require ZEPHIRPATH . 'Library/Statements/ForStatement.php';
@@ -61,9 +62,10 @@ require ZEPHIRPATH . 'Library/MethodCall.php';
 require ZEPHIRPATH . 'Library/StaticCall.php';
 require ZEPHIRPATH . 'Library/Passes/LocalContextPass.php';
 require ZEPHIRPATH . 'Library/Passes/LoopBreakPass.php';
+require ZEPHIRPATH . 'Library/Passes/SkipVariantInit.php';
+require ZEPHIRPATH . 'Library/Passes/StaticTypeInference.php';
 require ZEPHIRPATH . 'Library/Config.php';
 require ZEPHIRPATH . 'Library/Logger.php';
 require ZEPHIRPATH . 'Library/Utils.php';
 
 Compiler::boot();
-

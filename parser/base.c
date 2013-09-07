@@ -169,8 +169,14 @@ int xx_parse_program(char *program, unsigned int program_length, char *file_path
 			case XX_T_CLASS:
 				xx_(xx_parser, XX_CLASS, NULL, parser_status);
 				break;
+			case XX_T_INTERFACE:
+				xx_(xx_parser, XX_INTERFACE, NULL, parser_status);
+				break;
 			case XX_T_EXTENDS:
 				xx_(xx_parser, XX_EXTENDS, NULL, parser_status);
+				break;
+			case XX_T_IMPLEMENTS:
+				xx_(xx_parser, XX_IMPLEMENTS, NULL, parser_status);
 				break;
 			case XX_T_PUBLIC:
 				xx_(xx_parser, XX_PUBLIC, NULL, parser_status);
@@ -202,6 +208,9 @@ int xx_parse_program(char *program, unsigned int program_length, char *file_path
 			case XX_T_RETURN:
 				xx_(xx_parser, XX_RETURN, NULL, parser_status);
 				break;
+			case XX_T_REQUIRE:
+				xx_(xx_parser, XX_REQUIRE, NULL, parser_status);
+				break;
 			case XX_T_IF:
 				xx_(xx_parser, XX_IF, NULL, parser_status);
 				break;
@@ -219,6 +228,9 @@ int xx_parse_program(char *program, unsigned int program_length, char *file_path
 				break;
 			case XX_T_WHILE:
 				xx_(xx_parser, XX_WHILE, NULL, parser_status);
+				break;
+			case XX_T_DO:
+				xx_(xx_parser, XX_DO, NULL, parser_status);
 				break;
 			case XX_T_NEW:
 				xx_(xx_parser, XX_NEW, NULL, parser_status);
@@ -396,6 +408,15 @@ int xx_parse_program(char *program, unsigned int program_length, char *file_path
 			case XX_T_SUB:
 				xx_(xx_parser, XX_SUB, NULL, parser_status);
 				break;
+			case XX_T_MUL:
+				xx_(xx_parser, XX_MUL, NULL, parser_status);
+				break;
+			case XX_T_DIV:
+				xx_(xx_parser, XX_DIV, NULL, parser_status);
+				break;
+			case XX_T_MOD:
+				xx_(xx_parser, XX_MOD, NULL, parser_status);
+				break;
 			case XX_T_DOT:
 				xx_(xx_parser, XX_CONCAT, NULL, parser_status);
 				break;
@@ -421,8 +442,8 @@ int xx_parse_program(char *program, unsigned int program_length, char *file_path
 			case XX_T_STRING:
 				xx_parse_with_token(xx_parser, XX_T_STRING, XX_STRING, &token, parser_status);
 				break;
-			case XX_T_SCHAR:
-				xx_parse_with_token(xx_parser, XX_T_SCHAR, XX_SCHAR, &token, parser_status);
+			case XX_T_CHAR:
+				xx_parse_with_token(xx_parser, XX_T_CHAR, XX_CHAR, &token, parser_status);
 				break;
 			case XX_T_IDENTIFIER:
 				xx_parse_with_token(xx_parser, XX_T_IDENTIFIER, XX_IDENTIFIER, &token, parser_status);

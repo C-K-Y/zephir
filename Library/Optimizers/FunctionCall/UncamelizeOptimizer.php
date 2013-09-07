@@ -30,6 +30,10 @@ class UncamelizeOptimizer
 			throw new CompilerException("Returned values by functions can only be assigned to variant variables", $expression);
 		}
 
+		if ($call->mustInitSymbolVariable()) {
+			$symbolVariable->initVariant($context);
+		}
+
 		$resolvedParams = $call->getReadOnlyResolvedParams($expression['parameters'], $context, $expression);
 		$context->codePrinter->output('zephir_uncamelize(' . $symbolVariable->getName() . ', ' . $resolvedParams[0] . ');');
 		return new CompiledExpression('variable', $symbolVariable->getRealName(), $expression);

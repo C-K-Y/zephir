@@ -15,33 +15,56 @@ PHP_METHOD(Test_Scall, testCall3);
 PHP_METHOD(Test_Scall, testCall4);
 PHP_METHOD(Test_Scall, testCall5);
 PHP_METHOD(Test_Scall, testCall6);
+PHP_METHOD(Test_Scall, testCall7);
+PHP_METHOD(Test_Scall, testCall8);
+PHP_METHOD(Test_Scall, testCall9);
+PHP_METHOD(Test_Scall, testCall10);
+PHP_METHOD(Test_Scall, testCall11);
+PHP_METHOD(Test_Scall, testCall12);
+PHP_METHOD(Test_Scall, testCall13);
+PHP_METHOD(Test_Scall, testCall14);
 
-ZEND_BEGIN_ARG_INFO_EX(arginfo_test_scall_testMethod4, 0, 0, 0)
+ZEND_BEGIN_ARG_INFO_EX(arginfo_test_scall_testmethod4, 0, 0, 0)
 	ZEND_ARG_INFO(0, a)
 	ZEND_ARG_INFO(0, b)
 ZEND_END_ARG_INFO()
 
-ZEND_BEGIN_ARG_INFO_EX(arginfo_test_scall_testMethod5, 0, 0, 0)
+ZEND_BEGIN_ARG_INFO_EX(arginfo_test_scall_testmethod5, 0, 0, 0)
 	ZEND_ARG_INFO(0, a)
 	ZEND_ARG_INFO(0, b)
 ZEND_END_ARG_INFO()
 
-ZEND_BEGIN_ARG_INFO_EX(arginfo_test_scall_testMethod6, 0, 0, 0)
+ZEND_BEGIN_ARG_INFO_EX(arginfo_test_scall_testmethod6, 0, 0, 0)
 	ZEND_ARG_INFO(0, a)
 	ZEND_ARG_INFO(0, b)
 ZEND_END_ARG_INFO()
 
-ZEND_BEGIN_ARG_INFO_EX(arginfo_test_scall_testCall4, 0, 0, 0)
+ZEND_BEGIN_ARG_INFO_EX(arginfo_test_scall_testcall4, 0, 0, 0)
 	ZEND_ARG_INFO(0, a)
 	ZEND_ARG_INFO(0, b)
 ZEND_END_ARG_INFO()
 
-ZEND_BEGIN_ARG_INFO_EX(arginfo_test_scall_testCall5, 0, 0, 0)
+ZEND_BEGIN_ARG_INFO_EX(arginfo_test_scall_testcall5, 0, 0, 0)
 	ZEND_ARG_INFO(0, a)
 	ZEND_ARG_INFO(0, b)
 ZEND_END_ARG_INFO()
 
-ZEND_BEGIN_ARG_INFO_EX(arginfo_test_scall_testCall6, 0, 0, 0)
+ZEND_BEGIN_ARG_INFO_EX(arginfo_test_scall_testcall6, 0, 0, 0)
+	ZEND_ARG_INFO(0, a)
+	ZEND_ARG_INFO(0, b)
+ZEND_END_ARG_INFO()
+
+ZEND_BEGIN_ARG_INFO_EX(arginfo_test_scall_testcall10, 0, 0, 0)
+	ZEND_ARG_INFO(0, a)
+	ZEND_ARG_INFO(0, b)
+ZEND_END_ARG_INFO()
+
+ZEND_BEGIN_ARG_INFO_EX(arginfo_test_scall_testcall11, 0, 0, 0)
+	ZEND_ARG_INFO(0, a)
+	ZEND_ARG_INFO(0, b)
+ZEND_END_ARG_INFO()
+
+ZEND_BEGIN_ARG_INFO_EX(arginfo_test_scall_testcall12, 0, 0, 0)
 	ZEND_ARG_INFO(0, a)
 	ZEND_ARG_INFO(0, b)
 ZEND_END_ARG_INFO()
@@ -59,5 +82,13 @@ ZEPHIR_INIT_FUNCS(test_scall_method_entry) {
 	PHP_ME(Test_Scall, testCall4, arginfo_test_scall_testCall4, ZEND_ACC_PUBLIC)
 	PHP_ME(Test_Scall, testCall5, arginfo_test_scall_testCall5, ZEND_ACC_PUBLIC)
 	PHP_ME(Test_Scall, testCall6, arginfo_test_scall_testCall6, ZEND_ACC_PUBLIC)
+	PHP_ME(Test_Scall, testCall7, NULL, ZEND_ACC_PUBLIC)
+	PHP_ME(Test_Scall, testCall8, NULL, ZEND_ACC_PUBLIC)
+	PHP_ME(Test_Scall, testCall9, NULL, ZEND_ACC_PUBLIC)
+	PHP_ME(Test_Scall, testCall10, arginfo_test_scall_testCall10, ZEND_ACC_PUBLIC)
+	PHP_ME(Test_Scall, testCall11, arginfo_test_scall_testCall11, ZEND_ACC_PUBLIC)
+	PHP_ME(Test_Scall, testCall12, arginfo_test_scall_testCall12, ZEND_ACC_PUBLIC)
+	PHP_ME(Test_Scall, testCall13, NULL, ZEND_ACC_PUBLIC)
+	PHP_ME(Test_Scall, testCall14, NULL, ZEND_ACC_PUBLIC)
 	PHP_FE_END
 };

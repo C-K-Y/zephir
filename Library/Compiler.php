@@ -31,6 +31,10 @@ class Compiler
 
 	protected $_compiledFiles;
 
+	protected static $_reflections = array();
+
+	const VERSION = '0.2.0a';
+
 	/**
 	 * Pre-compiles classes creating a CompilerFile definition
 	 *
@@ -48,6 +52,10 @@ class Compiler
 		}
 	}
 
+	/**
+	 *
+	 * @param string $path
+	 */
 	protected function _recursivePreCompile($path)
 	{
 		/**
@@ -83,6 +91,17 @@ class Compiler
 	}
 
 	/**
+	 * Allows to check if a class is part of PHP
+	 *
+	 * @param string $className
+	 * @return bolean
+	 */
+	public function isInternalClass($className)
+	{
+		return class_exists($className, false);
+	}
+
+	/**
 	 * Returns class the class definition from a given class name
 	 *
 	 * @param string $className
@@ -98,6 +117,25 @@ class Compiler
 		return false;
 	}
 
+	/**
+	 * Returns class the class definition from a given class name
+	 *
+	 * @param string $className
+	 * @return ClassDefinition
+	 */
+	public function getInternalClassDefinition($className)
+	{
+		if (!isset(self::$_reflections[$className])) {
+			self::$_reflections[$className] = new ReflectionClass($className);
+		}
+		return self::$_reflections[$className];
+	}
+
+	/**
+	 * Copies the base kernel to the extension destination
+	 *
+	 * @param string $path
+	 */
 	protected function _copyBaseKernel($path)
 	{
 		/**
@@ -124,11 +162,8 @@ class Compiler
 	/**
 	 * Initializes a zephir extension
 	 */
-	public function init()
+	public function init($config , $logger)
 	{
-		//if (file_exists('config.json')) {
-		//	throw new Exception("A Zephir extension is already initialized in this directory");
-		//}
 
 		if (!is_dir('.temp')) {
 			mkdir('.temp');
@@ -162,7 +197,7 @@ class Compiler
 	/**
 	 *
 	 */
-	public function compile()
+	public function compile($config , $logger)
 	{
 
 		if (!file_exists('config.json')) {
@@ -174,19 +209,12 @@ class Compiler
 		}
 
 		/**
-		 * Global config
-		 */
-		$config = new Config();
-
-		/**
-		 * Global logger
-		 */
-		$logger = new Logger();
-
-		/**
 		 * Get global namespace
 		 */
 		$namespace = $config->get('namespace');
+		if (!$namespace) {
+			throw new Exception("Extension namespace cannot be loaded");
+		}
 
 		/**
 		 * Round 1. pre-compile all files in memory
@@ -197,23 +225,30 @@ class Compiler
 		}
 
 		/**
-		 * Round 2. compile all files to C sources
+		 * Round 2. Check 'extends' and 'implements' dependencies
+		 */
+		foreach ($this->_files as $compileFile) {
+			$compileFile->checkDependencies($this, $config, $logger);
+		}
+
+		/**
+		 * Round 3. compile all files to C sources
 		 */
 		$files = array();
 		foreach ($this->_files as $compileFile) {
-			$compileFile->compile($this, $logger);
+			$compileFile->compile($this, $config, $logger);
 			$files[] = $compileFile->getCompiledFile();
 		}
 
 		$this->_compiledFiles = $files;
 
 		/**
-		 * Round 3. create config.m4 and config.w32 files
+		 * Round 4. create config.m4 and config.w32 files
 		 */
 		$this->createConfigFiles($namespace);
 
 		/**
-		 * Round 4. create project.c and project.h files
+		 * Round 5. create project.c and project.h files
 		 */
 		$this->createProjectFiles($namespace);
 	}
@@ -224,9 +259,9 @@ class Compiler
 	public function install()
 	{
 		if (!file_exists('ext/Makefile')) {
-			system('export CC="gcc" && export CFLAGS="-O0 -g" && cd ext && phpize && ./configure --enable-test && sudo make install 1> /dev/null');
+			system('export CC="gcc" && export CFLAGS="-O0 -g" && cd ext && phpize --silent && ./configure --silent --enable-test && sudo make --silent install 1> /dev/null');
 		} else {
-			system('cd ext && sudo make install 1> /dev/null');
+			system('cd ext && sudo make --silent install 1> /dev/null');
 		}
 	}
 
@@ -273,31 +308,71 @@ class Compiler
 			throw new Exception("Template project.c doesn't exist");
 		}
 
+		$files = $this->_files;
+
+		/**
+		 * Round 1. Calculate the dependency rank
+		 * Classes are ordered according to a dependency ranking
+		 */
+		foreach ($files as $file) {
+			$classDefinition = $file->getClassDefinition();
+			if ($classDefinition) {
+				$classDefinition->calculateDependencyRank();
+			}
+		}
+
 		$classEntries = array();
 		$classInits = array();
-		foreach ($this->_files as $file) {
+
+		/**
+		 * Round 2. Generate the ZEPHIR_INIT calls according to the dependency rank
+		 */
+		foreach ($files as $file) {
 			$classDefinition = $file->getClassDefinition();
-			$classEntries[] = 'zend_class_entry *' . $classDefinition->getClassEntry() . ';';
-			$classInits[] = 'ZEPHIR_INIT(' . $classDefinition->getCNamespace() . '_' . $classDefinition->getName() . ');';
+			if ($classDefinition) {
+				$dependencyRank = $classDefinition->getDependencyRank();
+				if (!isset($classInits[$dependencyRank])) {
+					$classEntries[$dependencyRank] = array();
+					$classInits[$dependencyRank] = array();
+				}
+				$classEntries[$dependencyRank][] = 'zend_class_entry *' . $classDefinition->getClassEntry() . ';';
+				$classInits[$dependencyRank][] = 'ZEPHIR_INIT(' . $classDefinition->getCNamespace() . '_' . $classDefinition->getName() . ');';
+			}
+		}
+
+		asort($classInits);
+		asort($classEntries);
+
+		$completeClassInits = array();
+		foreach ($classInits as $dependencyRank => $rankClassInits) {
+			$completeClassInits = array_merge($completeClassInits, $rankClassInits);
+		}
+
+		$completeClassEntries = array();
+		foreach ($classEntries as $dependencyRank => $rankClassEntries) {
+			$completeClassEntries = array_merge($completeClassEntries, $rankClassEntries);
 		}
 
 		$toReplace = array(
 			'%PROJECT_LOWER%' 		=> strtolower($project),
 			'%PROJECT_UPPER%' 		=> strtoupper($project),
 			'%PROJECT_CAMELIZE%' 	=> ucfirst($project),
-			'%CLASS_ENTRIES%' 		=> implode(PHP_EOL, $classEntries),
-			'%CLASS_INITS%'			=> implode(PHP_EOL . "\t", $classInits),
+			'%CLASS_ENTRIES%' 		=> implode(PHP_EOL, $completeClassEntries),
+			'%CLASS_INITS%'			=> implode(PHP_EOL . "\t", $completeClassInits),
 		);
 
 		foreach ($toReplace as $mark => $replace) {
 			$content = str_replace($mark, $replace, $content);
 		}
 
+		/**
+		 * Round 3. Generate and place the entry point of the project
+		 */
 		file_put_contents('ext/' . $project . '.c', $content);
 		unset($content);
 
 		/**
-		 * project.h
+		 * Round 4. Generate the project main header
 		 */
 		$content = file_get_contents(__DIR__ . '/../templates/project.h');
 		if (empty($content)) {
@@ -322,7 +397,7 @@ class Compiler
 		file_put_contents('ext/' . $project . '.h', $content);
 	}
 
-	protected function showException($e)
+	protected static function showException($e)
 	{
 		echo get_class($e), ': ', $e->getMessage(), PHP_EOL;
 		if (method_exists($e, 'getExtra')) {
@@ -331,18 +406,20 @@ class Compiler
 				if (isset($extra['file'])) {
 					echo PHP_EOL;
 					$lines = file($extra['file']);
+					if (isset($lines[$extra['line'] - 1])) {
 					$line = $lines[$extra['line'] - 1];
 					echo "\t", str_replace("\t", " ", $line);
 					if (($extra['char'] - 1) > 0) {
 						echo "\t", str_repeat("-", $extra['char'] - 1), "^", PHP_EOL;
 					}
+					}
 				}
 			}
 		}
-		//echo PHP_EOL;
-		//$pwd = getcwd();
-		//echo 'at ', str_replace($pwd, '', $e->getFile()), '(', $e->getLine(), ')', PHP_EOL;
-		//echo str_replace($pwd, '', $e->getTraceAsString()), PHP_EOL;
+		echo PHP_EOL;
+		$pwd = getcwd();
+		echo 'at ', str_replace($pwd, '', $e->getFile()), '(', $e->getLine(), ')', PHP_EOL;
+		echo str_replace($pwd, '', $e->getTraceAsString()), PHP_EOL;
 		exit(1);
 	}
 
@@ -355,19 +432,46 @@ class Compiler
 
 			$c = new Compiler();
 
+			/**
+			 * Global config
+			 */
+			$config = new Config();
+
+			/**
+			 * Global logger
+			 */
+			$logger = new Logger();
+
 			if (isset($_SERVER['argv'][1])) {
 				$action = $_SERVER['argv'][1];
 			} else {
 				$action = 'compile';
 			}
 
+			/**
+			 * Change configurations flags
+			 */
+			if ($_SERVER['argc'] >= 2) {
+				for ($i = 2; $i < $_SERVER['argc']; $i++) {
+					if (preg_match('/^-fno-([a-z0-9\-]+)/', $_SERVER['argv'][$i], $matches)) {
+						$config->set($matches[1], false);
+					}
+				}
+			}
+
 			switch ($action) {
 				case 'init':
-					$c->init();
+					$c->init($config , $logger);
+					break;
+				case 'compile-only':
+					$c->compile($config , $logger);
 					break;
 				case 'compile':
-					$c->compile();
-					//$c->install();
+					$c->compile($config , $logger);
+					$c->install($config , $logger);
+					break;
+				case 'version':
+					echo self::VERSION, PHP_EOL;
 					break;
 				default:
 					throw new Exception('Unrecognized action "' . $action . '"');

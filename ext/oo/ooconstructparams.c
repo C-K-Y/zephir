@@ -39,19 +39,19 @@ PHP_METHOD(Test_Oo_OoConstructParams, __construct) {
 
 
 	zephir_update_property_this(this_ptr, SL("a"), a TSRMLS_CC);
-
 	zephir_update_property_this(this_ptr, SL("b"), b TSRMLS_CC);
-
 
 }
 
 PHP_METHOD(Test_Oo_OoConstructParams, getA) {
+
 
 	RETURN_MEMBER(this_ptr, "a");
 
 }
 
 PHP_METHOD(Test_Oo_OoConstructParams, getB) {
+
 
 	RETURN_MEMBER(this_ptr, "b");
 

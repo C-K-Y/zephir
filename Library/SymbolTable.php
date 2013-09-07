@@ -36,7 +36,7 @@ class SymbolTable
 	protected $_localContext;
 
 	/**
-	 *
+	 * Variable
 	 *
 	 * @param \CompilationContext $compilationContext
 	 */
@@ -48,6 +48,7 @@ class SymbolTable
 		$thisVar->increaseUses();
 		$thisVar->setReadOnly(true);
 		$thisVar->setLowName('this_ptr');
+		$thisVar->setDynamicType('object');
 		$this->_variables['this'] = $thisVar;
 
 		$returnValue = new Variable('variable', 'return_value', $compilationContext->currentBranch);
@@ -122,6 +123,11 @@ class SymbolTable
 		return $this->_variables;
 	}
 
+	/**
+	 * Checks if a variable is a superglobal
+	 *
+	 * @param string $name
+	 */
 	public function isSuperGlobal($name)
 	{
 		return $name == '_GET' || $name == '_POST' || $name == '_COOKIE' || $name == '_SERVER' || $name == '_SESSION';
@@ -138,6 +144,15 @@ class SymbolTable
 	{
 
 		/**
+		 * Validate that 'this' cannot be used in a static function
+		 */
+		if ($name == 'this' || $name == 'this_ptr') {
+			if ($compilationContext->staticContext) {
+				throw new CompilerException("Cannot use variable 'this' in static context", $statement);
+			}
+		}
+
+		/**
 		 * Create superglobals just in time
 		 */
 		if ($this->isSuperGlobal($name)) {
@@ -151,6 +166,7 @@ class SymbolTable
 
 				$superVar = new Variable('variable', $name, $compilationContext->currentBranch);
 				$superVar->setIsInitialized(true);
+				$superVar->setDynamicType('array');
 				$this->_variables[$name] = $superVar;
 			}
 		}
@@ -174,10 +190,30 @@ class SymbolTable
 	 *
 	 * @param string $name
 	 * @param array $statement
+	 * @param CompilationContext $compilationContext
 	 * @return \Variable
 	 */
-	public function getVariableForWrite($name, $statement=null)
+	public function getVariableForWrite($name, $compilationContext, $statement=null)
 	{
+		/**
+		 * Create superglobals just in time
+		 */
+		if ($this->isSuperGlobal($name)) {
+
+			if (!$this->hasVariable($name)) {
+
+				/**
+				 * @TODO, injecting globals, initialize to null and check first?
+				 */
+				$compilationContext->codePrinter->output('zephir_get_global(&' . $name . ', SS("' . $name . '") TSRMLS_CC);');
+
+				$superVar = new Variable('variable', $name, $compilationContext->currentBranch);
+				$superVar->setIsInitialized(true);
+				$superVar->setDynamicType('array');
+				$this->_variables[$name] = $superVar;
+				return $superVar;
+			}
+		}
 
 		if (!$this->hasVariable($name)) {
 			throw new CompilerException("Cannot write variable '" . $name . "' because it wasn't defined", $statement);
@@ -230,7 +266,7 @@ class SymbolTable
 	 *
 	 * @param string $type
 	 * @param string $location
-	 * @return
+	 * @return \Variable
 	 */
 	protected function _reuseTempVariable($type, $location)
 	{
@@ -253,10 +289,10 @@ class SymbolTable
 	 * @param string $type
 	 * @return Variable
 	 */
-	public function getTempVariable($type)
+	public function getTempVariable($type, $compilationContext)
 	{
 		$tempVar = $this->_tempVariable++;
-		return $this->addVariable($type, '_' . $tempVar);
+		return $this->addVariable($type, '_' . $tempVar, $compilationContext);
 	}
 
 	/**
@@ -280,6 +316,7 @@ class SymbolTable
 		$tempVar = $this->_tempVariable++;
 		$variable = $this->addVariable($type, '_' . $tempVar, $context);
 		$variable->setIsInitialized(true);
+		$variable->setTemporal(true);
 		$variable->increaseUses();
 		$variable->increaseMutates();
 		if ($type == 'variable') {
@@ -287,6 +324,40 @@ class SymbolTable
 		}
 
 		$this->_registerTempVariable($type, 'heap', $variable);
+		return $variable;
+	}
+
+	/**
+	 * Creates a temporary variable to be used in a write operation
+	 * the body of the variable is freed between iterations instead of
+	 * request a new full zval variable
+	 *
+	 * @param string $type
+	 * @param \CompilationContext $context
+	 */
+	public function getTempComplexLiteralVariableForWrite($type, CompilationContext $context)
+	{
+		$variable = $this->_reuseTempVariable($type, 'heap-literal');
+		if (is_object($variable)) {
+			$variable->increaseUses();
+			$variable->increaseMutates();
+			if ($type == 'variable') {
+				$variable->initComplexLiteralVariant($context);
+			}
+			return $variable;
+		}
+
+		$tempVar = $this->_tempVariable++;
+		$variable = $this->addVariable($type, '_' . $tempVar, $context);
+		$variable->setIsInitialized(true);
+		$variable->increaseUses();
+		$variable->increaseMutates();
+		$variable->setTemporal(true);
+		if ($type == 'variable') {
+			$variable->initComplexLiteralVariant($context);
+		}
+
+		$this->_registerTempVariable($type, 'heap-literal', $variable);
 		return $variable;
 	}
 
@@ -317,6 +388,7 @@ class SymbolTable
 		$variable->increaseUses();
 		$variable->increaseMutates();
 		$variable->setLocalOnly(true);
+		$variable->setTemporal(true);
 		if ($type == 'variable') {
 			$variable->initVariant($context);
 		}
@@ -343,6 +415,7 @@ class SymbolTable
 		$tempVar = $this->_tempVariable++;
 		$variable = $this->addVariable($type, '_' . $tempVar, $context);
 		$variable->setIsInitialized(true);
+		$variable->setTemporal(true);
 		$variable->increaseUses();
 		$variable->increaseMutates();
 
@@ -372,6 +445,7 @@ class SymbolTable
 		$tempVar = $this->_tempVariable++;
 		$variable = $this->addVariable($type, '_' . $tempVar, $context);
 		$variable->setIsInitialized(true);
+		$variable->setTemporal(true);
 		$variable->increaseUses();
 		$variable->increaseMutates();
 		$variable->observeVariant($context);

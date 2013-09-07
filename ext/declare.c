@@ -15,7 +15,7 @@
 
 
 /**
- * Function calls
+ * Variable declaration
  */
 ZEPHIR_INIT_CLASS(Test_Declare) {
 
@@ -28,9 +28,129 @@ ZEPHIR_INIT_CLASS(Test_Declare) {
 
 PHP_METHOD(Test_Declare, testDeclare1) {
 
-	int a = 0;
+	int a = 1;
+
 
 	RETURN_LONG(a);
+
+}
+
+PHP_METHOD(Test_Declare, testDeclare2) {
+
+	unsigned int a = 1;
+
+
+	RETURN_LONG(a);
+
+}
+
+PHP_METHOD(Test_Declare, testDeclare3) {
+
+	double a = 1.0;
+
+
+	RETURN_DOUBLE(a);
+
+}
+
+PHP_METHOD(Test_Declare, testDeclare4) {
+
+	double a = 1.0;
+
+
+	RETURN_DOUBLE(a);
+
+}
+
+PHP_METHOD(Test_Declare, testDeclare5) {
+
+	char a = 'A';
+
+
+	RETURN_LONG(a);
+
+}
+
+PHP_METHOD(Test_Declare, testDeclare6) {
+
+	unsigned char a = 'A';
+
+
+	RETURN_LONG(a);
+
+}
+
+PHP_METHOD(Test_Declare, testDeclare7) {
+
+	long a = 1;
+
+
+	RETURN_LONG(a);
+
+}
+
+PHP_METHOD(Test_Declare, testDeclare8) {
+
+	zend_bool a = 1;
+
+
+	RETURN_BOOL(a);
+
+}
+
+PHP_METHOD(Test_Declare, testDeclare9) {
+
+	zend_bool a = 0;
+
+
+	RETURN_BOOL(a);
+
+}
+
+PHP_METHOD(Test_Declare, testDeclare10) {
+
+	int a = 10;
+
+
+	RETURN_LONG(a);
+
+}
+
+PHP_METHOD(Test_Declare, testDeclare11) {
+
+	double a = 10.5;
+
+
+	RETURN_DOUBLE(a);
+
+}
+
+PHP_METHOD(Test_Declare, testDeclare12) {
+
+	zend_bool a = 0;
+
+
+	RETURN_BOOL(a);
+
+}
+
+PHP_METHOD(Test_Declare, testDeclare13) {
+
+	zend_bool a = 1;
+
+
+	RETURN_BOOL(a);
+
+}
+
+PHP_METHOD(Test_Declare, testDeclare14) {
+
+
+
+}
+
+PHP_METHOD(Test_Declare, testDeclare15) {
+
 
 
 }

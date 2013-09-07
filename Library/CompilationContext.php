@@ -40,6 +40,13 @@ class CompilationContext
 	public $codePrinter;
 
 	/**
+	 * Whether the current method is static or not
+	 *
+	 * @var boolean
+	 */
+	public $staticContext;
+
+	/**
 	 * Code printer for the header
 	 *
 	 * @var \CodePrinter
@@ -52,6 +59,13 @@ class CompilationContext
 	 * @var \SymbolTable
 	 */
 	public $symbolTable;
+
+	/**
+	 * Type inference data
+	 *
+	 * @param \StaticTypeInference
+	 */
+	public $typeInference;
 
 	/**
 	 * Represents the class currently being compiled
@@ -88,7 +102,14 @@ class CompilationContext
 	public $currentBranch = 0;
 
 	/**
-	 * Compiler
+	 * Global config
+	 *
+	 * @var \Config
+	 */
+	public $config;
+
+	/**
+	 * Global logger
 	 *
 	 * @var \Logger
 	 */

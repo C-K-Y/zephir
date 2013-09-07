@@ -77,7 +77,7 @@ class Router
 	 */
 	public function __construct(boolean defaultRoutes=true)
 	{
-		var routes, paths, paramsPattern, params;
+		var routes;
 
 		let routes = [];
 		if defaultRoutes === true {
@@ -85,11 +85,11 @@ class Router
 			// Two routes are added by default to match /:controller/:action and
 			// /:controller/:action/:params
 
-			let routes[] = new Test\Router\Route("#^/([a-zA-Z0-9\_\-]+)[/]{0,1}$#", [
+			let routes[] = new Test\Router\Route("#^/([a-zA-Z0-9\\_\\-]+)[/]{0,1}$#", [
 				"controller": 1
 			]);
 
-			let routes[] = new Test\Router\Route("#^/([a-zA-Z0-9\_\-]+)/([a-zA-Z0-9\.\_]+)(/.*)*$#", [
+			let routes[] = new Test\Router\Route("#^/([a-zA-Z0-9\\_\\-]+)/([a-zA-Z0-9\\.\\_]+)(/.*)*$#", [
 				"controller": 1,
 				"action": 2,
 				"params": 3
@@ -103,9 +103,9 @@ class Router
 	/**
 	 * Sets the dependency injector
 	 *
-	 * @param Phalcon\DiInterface dependencyInjector
+	 * @param Test\DiInterface dependencyInjector
 	 */
-	public function setDI(<Phalcon\DiInterface> dependencyInjector)
+	public function setDI(<Test\DiInterface> dependencyInjector)
 	{
 		let this->_dependencyInjector = dependencyInjector;
 	}
@@ -113,7 +113,7 @@ class Router
 	/**
 	 * Returns the internal dependency injector
 	 *
-	 * @return Phalcon\DiInterface
+	 * @return Test\DiInterface
 	 */
 	public function getDI()
 	{
@@ -276,6 +276,14 @@ class Router
 	}
 
 	/**
+	 * x
+	 */
+	public function doRemoveExtraSlashes(route)
+	{
+		return route;
+	}
+
+	/**
 	 * Handles routing information received from the rewrite engine
 	 *
 	 *<code>
@@ -291,7 +299,7 @@ class Router
 	public function handle(uri=null)
 	{
 		var realUri, request, currentHostName, routeFound, parts,
-			params, matches, routes, notFoundPaths,
+			params, matches, notFoundPaths,
 			vnamespace, module,  controller, action, paramsStr, strParams,
 			paramsMerge, route, methods, dependencyInjector,
 			hostname, regexHostName, matched, pattern, handledUri, beforeMatch,
@@ -306,7 +314,7 @@ class Router
 
 		// Remove extra slashes in the route
 		if (this->_removeExtraSlashes) {
-			let handledUri = removeExtraSlashes(realUri);
+			let handledUri = this->doRemoveExtraSlashes(realUri);
 		} else {
 			let handledUri = realUri;
 		}
@@ -330,7 +338,7 @@ class Router
 				// Retrieve the request service from the container
 				if request === null {
 
-					let dependencyInjector = this->_dependencyInjector;
+					let dependencyInjector = <Test\DiInterface> this->_dependencyInjector;
 					if typeof dependencyInjector != "object" {
 						throw new Test\Router\Exception("A dependency injection container is required to access the 'request' service");
 					}
@@ -418,7 +426,7 @@ class Router
 					parts = paths;
 
 				// Check if the matches has variables
-				if typeof matches != "array" {
+				if typeof matches == "array" {
 
 					// Get the route converters if any
 					let converters = route->getConverters();

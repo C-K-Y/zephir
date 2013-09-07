@@ -20,8 +20,12 @@
 class NotIdenticalOperator extends ComparisonBaseOperator
 {
 
+	protected $_commutative = true;
+
 	protected $_operator = '!=';
 
 	protected $_bitOperator = '!=';
+
+	protected $_zvalOperator = '!ZEPHIR_IS_IDENTICAL';
 
 }

@@ -50,21 +50,92 @@ class ClassMethod
 		$this->_docblock = $docblock;
 	}
 
+	/**
+	 * Returns the method name
+	 *
+	 * @return string
+	 */
 	public function getName()
 	{
 		return $this->_name;
 	}
 
+	/**
+	 * Returns the docblock
+	 *
+	 * @return string
+	 */
 	public function getDocBlock()
 	{
 		return $this->_docblock;
 	}
 
+	/**
+	 * Returns the parameters
+	 *
+	 * @return \ClassMethodParameters
+	 */
 	public function getParameters()
 	{
 		return $this->_parameters;
 	}
 
+	/**
+	 * Returns the number of parameters the method has
+	 *
+	 * @return int
+	 */
+	public function getNumberOfParameters()
+	{
+		if (is_object($this->_parameters)) {
+			return count($this->_parameters->getParameters());
+		}
+		return 0;
+	}
+
+	/**
+	 * Returns the number of required parameters the method has
+	 *
+	 * @return int
+	 */
+	public function getNumberOfRequiredParameters()
+	{
+		if (is_object($this->_parameters)) {
+			$parameters = $this->_parameters->getParameters();
+			if (count($parameters)) {
+				$required = 0;
+				foreach ($parameters as $parameter) {
+					if (!isset($parameter['default'])) {
+						$required++;
+					}
+				}
+				return $required;
+			}
+		}
+		return 0;
+	}
+
+	/**
+	 * Checks whether the method has a specific modifier
+	 *
+	 * @param string $modifier
+	 * @return boolean
+	 */
+	public function hasModifier($modifier)
+	{
+		foreach ($this->_visibility as $visibility) {
+			if ($visibility == $modifier) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * Returns the C-modifier flags
+	 *
+	 * @return string
+	 */
 	public function getModifiers()
 	{
 		$modifiers = array();
@@ -82,6 +153,13 @@ class ClassMethod
 				case 'static':
 					$modifiers['ZEND_ACC_STATIC'] = $visibility;
 					break;
+				case 'final':
+					$modifiers['ZEND_ACC_FINAL'] = $visibility;
+					break;
+				case 'inline':
+					break;
+				case 'scoped':
+					break;
 				default:
 					throw new Exception('Unknown modifier "' . $visibility . '"');
 			}
@@ -89,6 +167,9 @@ class ClassMethod
 		return join('|', array_keys($modifiers));
 	}
 
+	/**
+	 * Replace macros
+	 */
 	public function removeMemoryStackReferences(SymbolTable $symbolTable, $containerCode)
 	{
 		if (!$symbolTable->getMustGrownStack()) {
@@ -118,6 +199,7 @@ class ClassMethod
 	 * Assigns a default value
 	 *
 	 * @param array $parameter
+	 * @param CompilationContext $compilationContext
 	 */
 	public function assignDefaultValue($parameter, $compilationContext)
 	{
@@ -175,6 +257,13 @@ class ClassMethod
 					case 'double':
 						$code .= "\t\t" . 'ZVAL_DOUBLE(' . $parameter['name'] . ', ' . $parameter['default']['value'] . ');' . PHP_EOL;
 						break;
+					case 'bool':
+						if ($parameter['default']['value'] == 'true') {
+							$code .= "\t\t" . 'ZVAL_BOOL' . $parameter['name'] . ', 1);' . PHP_EOL;
+						} else {
+							$code .= "\t\t" . 'ZVAL_BOOL' . $parameter['name'] . ', 0);' . PHP_EOL;
+						}
+						break;
 					case 'null':
 						break;
 					default:
@@ -189,9 +278,11 @@ class ClassMethod
 	}
 
 	/**
-	 * Assigns zval value to static type
+	 * Assigns a zval value to a static type
 	 *
 	 * @param array $parameter
+	 * @param \CompilationContext $compilationContext
+	 * @return string
 	 */
 	public function assignZvalValue($parameter, $compilationContext)
 	{
@@ -230,16 +321,38 @@ class ClassMethod
 	public function compile(CompilationContext $compilationContext)
 	{
 
-		/**
-		 * This pass checks for zval variables than can be potentally
-		 * used without allocate memory and memory tracking
-		 * these variables are stored in the heap
-		 */
 		if (is_object($this->_statements)) {
-			$localContext = new LocalContextPass();
-			$localContext->pass($this->_statements);
+
+			/**
+			 * This pass checks for zval variables than can be potentally
+			 * used without allocate memory and memory tracking
+			 * these variables are stored in the stack
+			 */
+			if ($compilationContext->config->get('local-context-pass')) {
+				$localContext = new LocalContextPass();
+				$localContext->pass($this->_statements);
+			} else {
+				$localContext = null;
+			}
+
+			/**
+			 * This pass tries to infer types for dynamic variables
+			 * replacing them by low level variables
+			 */
+			if ($compilationContext->config->get('static-type-inference')) {
+				$typeInference = new StaticTypeInference();
+				$typeInference->pass($this->_statements);
+				if ($compilationContext->config->get('static-type-inference-second-pass')) {
+					$typeInference->reduce();
+					$typeInference->pass($this->_statements);
+				}
+			} else {
+				$typeInference = null;
+			}
+
 		} else {
 			$localContext = null;
+			$typeInference = null;
 		}
 
 		/**
@@ -250,6 +363,7 @@ class ClassMethod
 			$symbolTable->setLocalContext($localContext);
 		}
 
+		$compilationContext->typeInference = $typeInference;
 		$compilationContext->symbolTable = $symbolTable;
 
 		$oldCodePrinter = $compilationContext->codePrinter;
@@ -267,8 +381,28 @@ class ClassMethod
 			 */
 			foreach ($this->_parameters->getParameters() as $parameter) {
 
-				$symbolParam = null;
+				/**
+				 * Change dynamic variables by low level types
+				 */
+				if ($typeInference) {
+					if (isset($parameter['data-type'])) {
+						if ($parameter['data-type'] == 'variable') {
+							$type = $typeInference->getInferedType($parameter['name']);
+							if (is_string($type)) {
+								//echo $parameter['name'], ' ', $type, ' ', $parameter['file'], ' ', $parameter['line'], PHP_EOL;
+								//$statement['data-type'] = $type;
+							}
+						}
+					} else {
+						$type = $typeInference->getInferedType($parameter['name']);
+						if (is_string($type)) {
+							//echo $parameter['name'], ' ', $type, ' ', $parameter['file'], ' ', $parameter['line'], PHP_EOL;
+							//$statement['data-type'] = $type;
+						}
+					}
+				}
 
+				$symbolParam = null;
 				if (isset($parameter['data-type'])) {
 					if ($parameter['data-type'] == 'variable') {
 						$symbol = $symbolTable->addVariable($parameter['data-type'], $parameter['name'], $compilationContext);
@@ -318,6 +452,11 @@ class ClassMethod
 				}
 
 				/**
+				 * Original node where the variable was declared
+				 */
+				$symbol->setOriginal($parameter);
+
+				/**
 				 * Parameters are marked as 'external'
 				 */
 				$symbol->setIsExternal(true);
@@ -326,6 +465,22 @@ class ClassMethod
 				 * Assuming they're initialized
 				 */
 				$symbol->setIsInitialized(true);
+
+				/**
+				 * Variables with class/type must be objects across the execution
+				 */
+				if (isset($parameter['cast'])) {
+					$symbol->setDynamicType('object');
+					$symbol->setClassType($parameter['cast']['value']);
+				} else {
+					if (isset($parameter['data-type'])) {
+						if ($parameter['data-type'] == 'variable') {
+							$symbol->setDynamicType('undefined');
+						}
+					} else {
+						$symbol->setDynamicType('undefined');
+					}
+				}
 			}
 		}
 
@@ -333,15 +488,53 @@ class ClassMethod
 		 * Compile the block of statements if any
 		 */
 		if (is_object($this->_statements)) {
+			if ($this->hasModifier('static')) {
+				$compilationContext->staticContext = true;
+			} else {
+				$compilationContext->staticContext = false;
+			}
 			$this->_statements->compile($compilationContext);
+		}
+
+		/**
+		 * Initialize default values in dynamic variables
+		 */
+		$initVarCode = "";
+		foreach ($symbolTable->getVariables() as $variable) {
+			if ($variable->getType() == 'variable') {
+				if ($variable->getNumberUses() > 0) {
+					if ($variable->getName() != 'this_ptr' && $variable->getName() != 'return_value') {
+						$defaultValue = $variable->getDefaultInitValue();
+						if (is_array($defaultValue)) {
+							$symbolTable->mustGrownStack(true);
+							switch ($defaultValue['type']) {
+								case 'int':
+								case 'uint':
+								case 'long':
+								case 'char':
+								case 'uchar':
+									$initVarCode .= "\t" . 'ZEPHIR_INIT_VAR(' . $variable->getName() . ');' . PHP_EOL;
+									$initVarCode .= "\t" . 'ZVAL_LONG(' . $variable->getName() . ', ' . $defaultValue['value'] . ');' . PHP_EOL;
+									break;
+								case 'double':
+									$initVarCode .= "\t" . 'ZEPHIR_INIT_VAR(' . $variable->getName() . ');' . PHP_EOL;
+									$initVarCode .= "\t" . 'ZVAL_DOUBLE(' . $variable->getName() . ', ' . $defaultValue['value'] . ');' . PHP_EOL;
+									break;
+								default:
+									throw new CompilerException('Invalid default type: ' . $variable['expr']['type'] . ' for data type: ' . $statement['data-type'], $variable);
+							}
+						}
+					}
+				}
+			}
 		}
 
 		/**
 		 * Fetch parameters from vm-top
 		 */
+		$initCode = "";
+		$code = "";
 		if (is_object($this->_parameters)) {
-
-			$code = '';
 
 			/**
 			 * Round 2. Fetch the parameters in the method
@@ -375,9 +568,30 @@ class ClassMethod
 			}
 
 			/**
+			 * Pass the write detector to the method statement block to check if the parameter
+			 * variable is modified so as do the proper separation
+			 */
+			$parametersToSeparate = array();
+			if (is_object($this->_statements)) {
+				$writeDetector = new WriteDetector();
+				foreach ($this->_parameters->getParameters() as $parameter) {
+					if (isset($parameter['data-type'])) {
+						$dataType = $parameter['data-type'];
+					} else {
+						$dataType = 'variable';
+					}
+					if ($dataType == 'variable') {
+						$name = $parameter['name'];
+						if ($writeDetector->detect($name, $this->_statements->getStatements())) {
+							$parametersToSeparate[$name] = true;
+						}
+					}
+				}
+			}
+
+			/**
 			 * Initialize required parameters
 			 */
-			$initCode = '';
 			foreach ($requiredParams as $parameter) {
 
 				if (isset($parameter['data-type'])) {
@@ -392,6 +606,12 @@ class ClassMethod
 					 * Assign value from zval to low level type
 					 */
 					$initCode .= $this->assignZvalValue($parameter, $compilationContext);
+				}
+
+				if ($dataType == 'variable') {
+					if (isset($parametersToSeparate[$name])) {
+						$initCode .= "\t" . "ZEPHIR_SEPARATE_PARAM(" . $name . ");" . PHP_EOL;
+					}
 				}
 
 			}
@@ -425,28 +645,11 @@ class ClassMethod
 					$initCode .= $this->assignZvalValue($parameter, $compilationContext);
 					$initCode .= "\t" . '}' . PHP_EOL;
 				}
-			}
 
-			/**
-			 * Pass the write detector to the statement block to check if the parameter
-			 * variable is modified so as do the proper separation
-			 */
-			if (is_object($this->_statements)) {
-				$writeDetector = new WriteDetector();
-				foreach ($this->_parameters->getParameters() as $parameter) {
-
-					if (isset($parameter['data-type'])) {
-						$dataType = $parameter['data-type'];
-					} else {
-						$dataType = 'variable';
+				if ($dataType == 'variable') {
+					if (isset($parametersToSeparate[$name])) {
+						$initCode .= "\t" . "ZEPHIR_SEPARATE_PARAM(" . $name . ");" . PHP_EOL;
 					}
-
-					if ($dataType == 'variable') {
-						if ($writeDetector->detect($parameter['name'], $this->_statements->getStatements())) {
-							echo $parameter['name'];
-						}
-					}
-
 				}
 			}
 
@@ -461,10 +664,10 @@ class ClassMethod
 				$code .= "\t" . 'zephir_fetch_params(0, ' . $numberRequiredParams . ', ' . $numberOptionalParams . ', ' . join(', ', $params) . ');' . PHP_EOL;
 			}
 			$code .= PHP_EOL;
-			$code .= $initCode;
-
-			$codePrinter->preOutput($code);
 		}
+
+		$code .= $initCode . $initVarCode;
+		$codePrinter->preOutput($code);
 
 		/**
 		 * Grow the stack if needed
@@ -481,7 +684,7 @@ class ClassMethod
 		foreach ($symbolTable->getVariables() as $variable) {
 
 			if ($variable->getNumberUses() <= 0) {
-				$compilationContext->logger->warning('Variable "' . $variable->getName() . '" declared but not used in ' . $compilationContext->classDefinition->getName() . '::' . $this->getName(), "unused-variable");
+				$compilationContext->logger->warning('Variable "' . $variable->getName() . '" declared but not used in ' . $compilationContext->classDefinition->getName() . '::' . $this->getName(), "unused-variable", $variable->getOriginal());
 				if ($variable->isExternal() == false) {
 					continue;
 				}
@@ -547,11 +750,16 @@ class ClassMethod
 				case 'HashPosition':
 					$code = 'HashPosition ';
 					break;
+				case 'zend_class_entry':
+					$pointer = '*';
+					$code = 'zend_class_entry ';
+					break;
 				default:
 					throw new CompilerException("Unsupported type in declare: " . $type);
 			}
 
 			$groupVariables = array();
+			$defaultValues = array();
 			foreach ($variables as $variable) {
 				if (($type == 'variable' || $type == 'string') && $variable->mustInitNull()) {
 					if ($variable->isLocalOnly()) {
@@ -565,14 +773,18 @@ class ClassMethod
 					}
 				} else {
 					if ($variable->isLocalOnly()) {
-						$groupVariables[] = $variable->getName() . ' = zval_used_for_init';
+						$groupVariables[] = $variable->getName();
 					} else {
 						if ($variable->isDoublePointer()) {
 							$groupVariables[] = $pointer . $pointer . $variable->getName();
 						} else {
 							$defaultValue = $variable->getDefaultInitValue();
 							if ($defaultValue !== null) {
-								$groupVariables[] = $pointer . $variable->getName() . ' = '. $defaultValue;
+								if ($type == 'variable') {
+									$groupVariables[] = $pointer . $variable->getName();
+								} else {
+									$groupVariables[] = $pointer . $variable->getName() . ' = '. $defaultValue;
+								}
 							} else {
 								$groupVariables[] = $pointer . $variable->getName();
 							}
@@ -589,7 +801,8 @@ class ClassMethod
 		 */
 		if (is_object($this->_statements)) {
 			if ($symbolTable->getMustGrownStack()) {
-				if ($this->_statements->getLastStatementType() != 'return') {
+				$lastType = $this->_statements->getLastStatementType();
+				if ($lastType != 'return' && $lastType != 'throw') {
 					$compilationContext->headersManager->add('kernel/memory');
 					$codePrinter->output("\t" . 'ZEPHIR_MM_RESTORE();');
 				}
@@ -606,15 +819,6 @@ class ClassMethod
 		 */
 		$oldCodePrinter->output($code);
 		$compilationContext->codePrinter = $oldCodePrinter;
-
-		/*foreach ($symbolTable->getTemporalVariables() as $location => $typeVariables) {
-			echo $location, PHP_EOL;
-			foreach ($typeVariables as $type => $variables) {
-				foreach ($variables as $variable) {
-					echo $variable->getName(), PHP_EOL;
-				}
-			}
-		}*/
 
 		return null;
 	}

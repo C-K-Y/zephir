@@ -20,14 +20,22 @@
 /**
  * Logger
  *
- *
+ * Entrypoint for warnings/notices/errors generated in compilation
  */
 class Logger
 {
 
-	public function warning($message, $type)
+	/**
+	 *
+	 * @param string $message
+	 * @param string $type
+	 * @param array $node
+	 */
+	public function warning($message, $type, $node)
 	{
-		echo 'Warning: ' . $message . ' [' . $type . ']' . PHP_EOL;
+		echo 'Warning: ' . $message;
+		echo ' in ' . $node['file'] . ' on ' . $node['line'];
+		echo ' [' . $type . ']' . PHP_EOL;
 	}
 
 }

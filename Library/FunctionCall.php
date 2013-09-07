@@ -30,13 +30,22 @@ class FunctionCall extends Call
 
 	static protected $_functionReflection = array();
 
+	/**
+	 * Process the ReflectionFunction for the specified function name
+	 *
+	 * @param string $funcName
+	 */
 	protected function getReflector($funcName)
 	{
 		/**
 		 * Check if the optimizer is already cached
 		 */
 		if (!isset(self::$_functionReflection[$funcName])) {
-			$reflectionFunction = new ReflectionFunction($funcName);
+			try {
+				$reflectionFunction = new ReflectionFunction($funcName);
+			} catch (Exception $e) {
+				$reflectionFunction = null;
+			}
 			self::$_functionReflection[$funcName] = $reflectionFunction;
 			return $reflectionFunction;
 		}
@@ -61,6 +70,7 @@ class FunctionCall extends Call
 		$reflector = $this->getReflector($funcName);
 		if ($reflector) {
 
+
 			if (isset($expression['parameters'])) {
 				/**
 				 * Check if the number of parameters
@@ -70,6 +80,7 @@ class FunctionCall extends Call
 					throw new CompilerException("The number of parameters passed is less than the number of requiered parameters by '" . $funcName . "'", $expression);
 				}
 			} else {
+				$numberParameters = 0;
 				if ($reflector->getNumberOfRequiredParameters() > 0) {
 					throw new CompilerException("The number of parameters passed is less than the number of requiered parameters by '" . $funcName . "'", $expression);
 				}
@@ -93,6 +104,41 @@ class FunctionCall extends Call
 	}
 
 	/**
+	 * Once the function processes the parameters we should mark
+	 * specific parameters to be passed by reference
+	 *
+	 * @param string $funcName
+	 * @param array $expression
+	 * @param array $references
+	 * @return boolean
+	 */
+	protected function markReferences($funcName, $parameters, CompilationContext $compilationContext, &$references)
+	{
+		if ($this->isBuiltInFunction($funcName)) {
+			return false;
+		}
+
+		$reflector = $this->getReflector($funcName);
+		if ($reflector) {
+			$numberParameters = count($parameters);
+			if ($numberParameters > 0) {
+				$n = 1;
+				$funcParameters = $reflector->getParameters();
+				foreach ($funcParameters as $parameter) {
+					if ($numberParameters >= $n) {
+						if ($parameter->isPassedByReference()) {
+							$compilationContext->codePrinter->output('Z_SET_ISREF_P(' . $parameters[$n - 1] . ');');
+							$references[] = $parameters[$n - 1] ;
+							return false;
+						}
+					}
+					$n++;
+				}
+			}
+		}
+	}
+
+	/**
 	 * Tries to find specific an specialized optimizer for function calls
 	 *
 	 * @param string $funcName
@@ -107,11 +153,9 @@ class FunctionCall extends Call
 
 			$camelizeFunctionName = Utils::camelize($funcName);
 
-			$path = 'Library/Optimizers/FunctionCall/' . $camelizeFunctionName . 'Optimizer.php';
+			$path = ZEPHIRPATH . 'Library/Optimizers/FunctionCall/' . $camelizeFunctionName . 'Optimizer.php';
 			if (file_exists($path)) {
-
 				require $path;
-
 				$className = $camelizeFunctionName . 'Optimizer';
 				$optimizer = new $className();
 			} else {
@@ -146,11 +190,17 @@ class FunctionCall extends Call
 			case 'uncamelize':
 			case 'starts_with':
 			case 'ends_with':
+			case 'prepare_virtual_path':
 				return true;
 		}
 		return false;
 	}
 
+	/**
+	 * Checks if a function exists or is a built-in Zephir function
+	 *
+	 * @param string $functionName
+	 */
 	public function functionExists($functionName)
 	{
 		if (function_exists($functionName)) {
@@ -178,7 +228,7 @@ class FunctionCall extends Call
 
 		$exists = true;
 		if (!$this->functionExists($funcName)) {
-			$compilationContext->logger->warning("Function \"$funcName\" does not exist at compile time", "nonexistant-function");
+			$compilationContext->logger->warning("Function \"$funcName\" does not exist at compile time", "nonexistant-function", $expression);
 			$exists = false;
 		}
 
@@ -213,6 +263,15 @@ class FunctionCall extends Call
 			$params = array();
 		}
 
+		/**
+		 * Some functions receive parameters as references
+		 * We mark those parameters temporary as references to properly assign them
+		 */
+		$this->markReferences($funcName, $params, $compilationContext, $references, $expression);
+		if (count($references)) {
+			//var_dump($references);
+		}
+
 		$codePrinter = $compilationContext->codePrinter;
 
 		/**
@@ -230,9 +289,19 @@ class FunctionCall extends Call
 		}
 
 		/**
+		 * We don't know the exact dynamic type returned by the method call
+		 */
+		$symbolVariable->setDynamicType('undefined');
+
+		/**
 		 * Include fcall header
 		 */
 		$compilationContext->headersManager->add('kernel/fcall');
+
+		/**
+		 * Call functions must grown the stack
+		 */
+		$compilationContext->symbolTable->mustGrownStack(true);
 
 		if (!isset($expression['parameters'])) {
 			if ($this->isExpectingReturn()) {
@@ -256,6 +325,13 @@ class FunctionCall extends Call
 			} else {
 				$codePrinter->output('zephir_call_func_noret("' . $funcName . '");');
 			}
+		}
+
+		/**
+		 * We can mark temporary variables generated as idle
+		 */
+		foreach ($this->getTemporalVariables() as $tempVariable) {
+			$tempVariable->setIdle(true);
 		}
 
 		if ($this->isExpectingReturn()) {

@@ -32,7 +32,7 @@
 #define XX_T_TRUE 306
 #define XX_T_IDENTIFIER 307
 #define XX_T_ARRAY 308
-#define XX_T_SCHAR 309
+#define XX_T_CHAR 309
 
 #define XX_T_TYPE_INTEGER 310
 #define XX_T_TYPE_DOUBLE 311
@@ -83,6 +83,8 @@
 #define XX_T_INLINE 385
 #define XX_T_FINAL 386
 #define XX_T_CONSTANT 387
+#define XX_T_DO 388
+#define XX_T_REQUIRE 389
 
 /* Operators */
 #define XX_T_AT '@'
@@ -104,6 +106,9 @@
 #define XX_T_IDENTICAL 402
 #define XX_T_ADD '+'
 #define XX_T_SUB '-'
+#define XX_T_MUL '*'
+#define XX_T_DIV '/'
+#define XX_T_MOD '%'
 #define XX_T_INCR 403
 #define XX_T_DECR 404
 #define XX_T_NOTEQUALS 405
