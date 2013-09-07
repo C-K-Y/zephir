@@ -24,4 +24,8 @@ class GreaterOperator extends ComparisonBaseOperator
 
 	protected $_bitOperator = '>';
 
+	protected $_zvalOperator = 'ZEPHIR_GT';
+
+	protected $_zvalLongOperator = 'ZEPHIR_GT_LONG';
+
 }

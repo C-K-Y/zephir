@@ -1,5 +1,22 @@
 <?php
 
+/*
+ +----------------------------------------------------------------------+
+ | Zephir Language                                                      |
+ +----------------------------------------------------------------------+
+ | Copyright (c) 2013 Zephir Team                                       |
+ +----------------------------------------------------------------------+
+ | This source file is subject to version 1.0 of the Zephir license,    |
+ | that is bundled with this package in the file LICENSE, and is        |
+ | available through the world-wide-web at the following url:           |
+ | http://www.zephir-lang.com/license                                   |
+ |                                                                      |
+ | If you did not receive a copy of the Zephir license and are unable   |
+ | to obtain it through the world-wide-web, please send a note to       |
+ | license@zephir-lang.com so we can mail you a copy immediately.       |
+ +----------------------------------------------------------------------+
+*/
+
 /**
  * LocalContextPass
  *
@@ -34,6 +51,11 @@ class LocalContextPass
 		}
 	}
 
+	/**
+	 * Marks a variable to mandatory be stored in the heap
+	 *
+	 * @param string $variable
+	 */
 	public function markVariableNoLocal($variable)
 	{
 		if (isset($this->_variables[$variable])) {
@@ -42,7 +64,7 @@ class LocalContextPass
 	}
 
 	/**
-	 * Asks the local context information if a variable can be static instead of allocated
+	 * Asks the local context information whether a variable can be stored in the stack instead of the heap
 	 *
 	 * @param string $variable
 	 * @return boolean
@@ -81,7 +103,7 @@ class LocalContextPass
 							$this->markVariableNoLocal($assigment['variable']);
 							break;
 						default:
-							//echo '[', $assigment['assign-type'], ']';
+							//echo '[', $assigment['expr']['type'], ']';
 					}
 					break;
 				case 'object-property':
@@ -96,9 +118,9 @@ class LocalContextPass
 					$this->markVariableNoLocal($assigment['variable']);
 					break;
 				case 'variable-append':
+					$this->markVariableNoLocal($assigment['variable']);
 					switch ($assigment['expr']['type']) {
 						case 'variable':
-							$this->markVariableNoLocal($assigment['variable']);
 							$this->markVariableNoLocal($assigment['expr']['value']);
 							break;
 						default:
@@ -154,18 +176,34 @@ class LocalContextPass
 			case 'bool':
 			case 'double':
 			case 'int':
+			case 'uint';
+			case 'long':
+			case 'ulong':
 			case 'string':
 			case 'null':
+			case 'char':
+			case 'uchar':
 			case 'empty-array':
 			case 'variable':
+			case 'constant':
+			case 'static-constant-access':
 				break;
 			case 'sub':
 			case 'add':
+			case 'div':
+			case 'mul':
+			case 'mod':
+			case 'and':
+			case 'or':
 			case 'concat':
 			case 'equals':
 			case 'identical':
 			case 'not-identical':
 			case 'not-equals':
+			case 'less':
+			case 'greater':
+			case 'greater-equal':
+			case 'less-equal':
 				$this->passExpression($expression['left']);
 				$this->passExpression($expression['right']);
 				break;
@@ -175,6 +213,7 @@ class LocalContextPass
 				break;
 			case 'mcall':
 			case 'fcall':
+			case 'scall':
 				$this->passCall($expression);
 				break;
 			case 'array':
@@ -183,8 +222,23 @@ class LocalContextPass
 			case 'new':
 				$this->passNew($expression);
 				break;
+			case 'property-access':
+			case 'array-access':
+				$this->passExpression($expression['left']);
+				break;
+			case 'fetch':
+			case 'isset':
+				$this->passExpression($expression['left']);
+				break;
+			case 'list':
+				$this->passExpression($expression['left']);
+				break;
+			case 'cast':
+			case 'type-hint':
+				$this->passExpression($expression['right']);
+				break;
 			default:
-				//echo $expression['type'], PHP_EOL;
+				echo $expression['type'], PHP_EOL;
 				break;
 		}
 	}
@@ -198,6 +252,11 @@ class LocalContextPass
 					$this->passLetStatement($statement);
 					break;
 				case 'echo':
+					if (isset($statement['expressions'])) {
+						foreach ($statement['expressions'] as $expr) {
+							$this->passExpression($expr);
+						}
+					}
 					break;
 				case 'declare':
 					$this->declareVariables($statement);
@@ -213,7 +272,23 @@ class LocalContextPass
 						$this->passStatementBlock($statement['else_statements']);
 					}
 					break;
+				case 'switch':
+					if (isset($statement['expr'])) {
+						$this->passExpression($statement['expr']);
+					}
+					if (isset($statement['clauses'])) {
+						foreach ($statement['clauses'] as $clause) {
+							if (isset($clause['expr'])) {
+								$this->passExpression($clause['expr']);
+							}
+							if (isset($clause['statements'])) {
+								$this->passStatementBlock($clause['statements']);
+							}
+						}
+					}
+					break;
 				case 'while':
+				case 'do-while':
 					if (isset($statement['expr'])) {
 						$this->passExpression($statement['expr']);
 					}
@@ -236,6 +311,12 @@ class LocalContextPass
 					}
 					break;
 				case 'return':
+					if (isset($statement['expr'])) {
+						$this->passExpression($statement['expr']);
+						if ($statement['expr']['type'] == 'variable') {
+							$this->markVariableNoLocal($statement['expr']['value']);
+						}
+					}
 					break;
 				case 'loop':
 					if (isset($statement['statements'])) {
@@ -243,13 +324,21 @@ class LocalContextPass
 					}
 					break;
 				case 'throw':
+					if (isset($statement['expr'])) {
+						$this->passExpression($statement['expr']);
+					}
 					break;
 				case 'mcall':
+				case 'scall':
 				case 'fcall':
 					$this->passCall($statement['expr']);
 					break;
+				case 'break':
+				case 'continue':
+				case 'unset':
+					break;
 				default:
-
+					echo $statement['type'];
 			}
 		}
 	}

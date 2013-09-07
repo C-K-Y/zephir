@@ -45,28 +45,43 @@ class DeclareStatement
 			throw new CompilerException("Data type is required", $this->_statement);
 		}
 
+		$typeInference = $compilationContext->typeInference;
+		$symbolTable = $compilationContext->symbolTable;
+
 		$variables = array();
 		foreach ($statement['variables'] as $variable) {
 
-			if ($compilationContext->symbolTable->hasVariable($variable['variable'])) {
+			if ($symbolTable->hasVariable($variable['variable'])) {
 				throw new CompilerException("Variable '" . $variable['variable'] . "' is already defined", $variable);
+			}
+
+			$currentType = $statement['data-type'];
+
+			/**
+			 * Replace original data type by the pre-processed infered type
+			 */
+			if ($typeInference) {
+				if ($currentType == 'variable') {
+					$type = $typeInference->getInferedType($variable['variable']);
+					if (is_string($type)) {
+						$currentType = $type;
+					}
+				}
 			}
 
 			/**
 			 * Variables are added to the symbol table
 			 */
 			if (isset($variable['expr'])) {
-				$symbolVariable = $compilationContext->symbolTable->addVariable($statement['data-type'], $variable['variable'], $compilationContext, $variable['expr']);
+				$symbolVariable = $symbolTable->addVariable($currentType, $variable['variable'], $compilationContext, $variable['expr']);
 			} else {
-				$symbolVariable = $compilationContext->symbolTable->addVariable($statement['data-type'], $variable['variable'], $compilationContext);
+				$symbolVariable = $symbolTable->addVariable($currentType, $variable['variable'], $compilationContext);
 			}
 
 			/**
-			 * Variables with a default value are initialized by default
+			 * Set the node where the variable is declared
 			 */
-			if (isset($variable['expr'])) {
-				$symbolVariable->setIsInitialized(true);
-			}
+			$symbolVariable->setOriginal($variable);
 
 			if (isset($variable['expr'])) {
 				$defaultValue = $variable['expr']['value'];
@@ -74,23 +89,84 @@ class DeclareStatement
 				$defaultValue = null;
 			}
 
+			/**
+			 * Variables with a default value are initialized by default
+			 */
 			if ($defaultValue !== null) {
 
-				switch ($statement['data-type']) {
+				switch ($currentType) {
 					case 'int':
+					case 'uint':
+					case 'ulong':
+					case 'long':
 						switch ($variable['expr']['type']) {
+							case 'int':
+							case 'uint':
+							case 'ulong':
 							case 'int':
 								break;
 							default:
 								throw new CompilerException('Invalid default type: ' . $variable['expr']['type'] . ' for data type: ' . $statement['data-type'], $variable);
 						}
 						break;
+					case 'double':
+						switch ($variable['expr']['type']) {
+							case 'double':
+								break;
+							default:
+								throw new CompilerException('Invalid default type: ' . $variable['expr']['type'] . ' for data type: ' . $statement['data-type'], $variable);
+						}
+						break;
+					case 'bool':
+						switch ($variable['expr']['type']) {
+							case 'bool':
+								if ($variable['expr']['value'] == 'true') {
+									$defaultValue = 1;
+								} else {
+									$defaultValue = 0;
+								}
+								break;
+							default:
+								throw new CompilerException('Invalid default type: ' . $variable['expr']['type'] . ' for data type: ' . $statement['data-type'], $variable);
+						}
+						break;
+					case 'char':
+					case 'uchar':
+						switch ($variable['expr']['type']) {
+							case 'char':
+							case 'uchar':
+								$defaultValue = '\'' . $defaultValue . '\'';
+								break;
+							case 'int':
+								break;
+							default:
+								throw new CompilerException('Invalid default type: ' . $variable['expr']['type'] . ' for data type: ' . $statement['data-type'], $variable);
+						}
+						break;
+					case 'variable':
+						$defaultValue = $variable['expr'];
+						switch ($variable['expr']['type']) {
+							case 'int':
+							case 'uint':
+							case 'long':
+							case 'char':
+							case 'uchar':
+								$symbolVariable->setDynamicType('long');
+								break;
+							case 'double':
+								$symbolVariable->setDynamicType('double');
+								break;
+							default:
+								throw new CompilerException('Invalid default type: ' . $variable['expr']['type'] . ' for data type: ' . $statement['data-type'], $variable);
+						}
+						break;
 					default:
-						throw new CompilerException('Invalid data type: ' . $statement['data-type'], $variable);
+						throw new CompilerException('Invalid data type: ' . $currentType, $variable);
 				}
 
 				$symbolVariable->setDefaultInitValue($defaultValue);
 				$symbolVariable->setIsInitialized(true);
+				$symbolVariable->increaseMutates();
 			}
 		}
 

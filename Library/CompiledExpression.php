@@ -52,16 +52,31 @@ class CompiledExpression
 		return $this->_type;
 	}
 
+	/**
+	 * Returns the code produced by the compiled expression
+	 *
+	 * @return string
+	 */
 	public function getCode()
 	{
 		return $this->_code;
 	}
 
+	/**
+	 * Original AST code that produced the code
+	 *
+	 * @return array
+	 */
 	public function getOriginal()
 	{
 		return $this->_originalExpr;
 	}
 
+	/**
+	 * Returns a C representation for a boolean constant
+	 *
+	 * @return string
+	 */
 	public function getBooleanCode()
 	{
 		if ($this->_code == 'true') {
@@ -76,9 +91,43 @@ class CompiledExpression
 	}
 
 	/**
+	 * Checks if the compiled expression is an integer or compatible type
+	 *
+	 * @return boolean
+	 */
+	public function isIntCompatibleType()
+	{
+		switch ($this->_type) {
+			case 'int':
+			case 'uint':
+			case 'long':
+			case 'ulong':
+			case 'char':
+			case 'uchar':
+				return true;
+		}
+		return false;
+	}
+
+	/**
+	 * Checks if the compiled expression is a char or compatible type
+	 *
+	 * @return boolean
+	 */
+	public function isCharCompatibleType()
+	{
+		switch ($this->_type) {
+			case 'char':
+			case 'uchar':
+				return true;
+		}
+		return false;
+	}
+
+	/**
 	 * Resolves an expression
 	 * Some code cannot be directly pushed into the generated source
-	 * because it's missing some bind parts, this method resolves the missing parts
+	 * because it's missing some bound parts, this method resolves the missing parts
 	 * returning the generated code
 	 *
 	 * @param string $result

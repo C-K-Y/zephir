@@ -340,4 +340,11 @@ class NativeArray
 		return a;
 	}
 
+	public function testArrayWrongUpdate1()
+	{
+		var x, y;
+		let x = [], y = "hello";
+		let x[y] = new stdClass;
+	}
+
 }

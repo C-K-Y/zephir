@@ -20,15 +20,23 @@
 /**
  * Config
  *
- *
+ * Manages compiler global configuration
  */
 class Config
 {
-	protected $_config;
+	protected $_config = array(
+		'static-type-inference' => true,
+		'static-type-inference-second-pass' => true,
+		'local-context-pass' => true,
+		'constant-folding' => true
+	);
 
 	public function __construct()
 	{
-		$this->_config = json_decode(file_get_contents('config.json'), true);
+		if (file_exists('config.json')) {
+			$config = json_decode(file_get_contents('config.json'), true);
+			$this->_config = array_merge($this->_config, $config);
+		}
 	}
 
 	public function get($key)
@@ -37,6 +45,11 @@ class Config
 			return $this->_config[$key];
 		}
 		return null;
+	}
+
+	public function set($key, $value)
+	{
+		$this->_config[$key] = $value;
 	}
 
 }

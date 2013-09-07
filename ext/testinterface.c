@@ -1,0 +1,4 @@
+
+/**
+ * Sample exception class
+ */

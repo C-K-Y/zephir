@@ -24,4 +24,8 @@ class LessEqualOperator extends ComparisonBaseOperator
 
 	protected $_bitOperator = '<=';
 
+	protected $_zvalOperator = 'ZEPHIR_LE';
+
+	protected $_zvalLongOperator = 'ZEPHIR_LE_LONG';
+
 }

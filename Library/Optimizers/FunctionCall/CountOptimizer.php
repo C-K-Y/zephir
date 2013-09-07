@@ -9,6 +9,9 @@ class CountOptimizer
 {
 	/**
 	 *
+	 * @param array $expression
+	 * @param Call $call
+	 * @param CompilationContext $context
 	 */
 	public function optimize(array $expression, Call $call, CompilationContext $context)
 	{
@@ -21,6 +24,6 @@ class CountOptimizer
 		}
 
 		$resolvedParams = $call->getReadOnlyResolvedParams($expression['parameters'], $context, $expression);
-		return new CompiledExpression('int', 'zephir_fast_count_ev(' . $resolvedParams[0] . ' TSRMLS_CC)', $expression);
+		return new CompiledExpression('int', 'zephir_fast_count_int(' . $resolvedParams[0] . ' TSRMLS_CC)', $expression);
 	}
 }

@@ -17,7 +17,6 @@
  +----------------------------------------------------------------------+
 */
 
-
 /**
  * Variable
  *
@@ -29,6 +28,11 @@ class Variable
 	 * Variable's type
 	 */
 	protected $_type;
+
+	/**
+	 * Current dynamic type of the variable
+	 */
+	protected $_dynamicType = 'unknown';
 
 	/**
 	 * Variable's name
@@ -49,6 +53,11 @@ class Variable
 	 * Number of times the variable has been read
 	 */
 	protected $_numberUses = 0;
+
+	/**
+	 * Whether the variable is temporal or not
+	 */
+	protected $_temporal = false;
 
 	/**
 	 * Temporal variables are marked as idle
@@ -76,6 +85,15 @@ class Variable
 
 	protected $_defaultInitValue;
 
+	protected $_classType;
+
+	protected $_numberSkips = 0;
+
+	/**
+	 * AST node where the variable was originally declared or created
+	 */
+	protected $_node;
+
 	/**
 	 * @param string $type
 	 * @param string $name
@@ -89,6 +107,8 @@ class Variable
 	}
 
 	/**
+	 * Returns the type of variable
+	 *
 	 * @return string
 	 */
 	public function getType()
@@ -188,6 +208,26 @@ class Variable
 	}
 
 	/**
+	 * Sets whether the variable is temporal or not
+	 *
+	 * @param boolean $temporal
+	 */
+	public function setTemporal($temporal)
+	{
+		$this->_temporal = $temporal;
+	}
+
+	/**
+	 * Returns whether the variable is temporal or not
+	 *
+	 * @return boolean
+	 */
+	public function isTemporal()
+	{
+		return $this->_temporal;
+	}
+
+	/**
 	 * Once a temporal variable is unused in a specific branch
 	 * it is marked as idle
 	 *
@@ -216,6 +256,70 @@ class Variable
 	public function getBranch()
 	{
 		return $this->_branch;
+	}
+
+	/**
+	 * Set the original AST node where the variable was declared
+	 *
+	 * @param array $node
+	 */
+	public function setOriginal($node)
+	{
+		$this->_node = $node;
+	}
+
+	/**
+	 * Returns the original AST node where the variable was declared
+	 *
+	 * @return array
+	 */
+	public function getOriginal()
+	{
+		$node = $this->_node;
+		if ($node) {
+			return $node;
+		}
+		return array('file' => 'unknown', 'line' => 0, 'char' => 0);
+	}
+
+	/**
+	 * Sets the PHP class related to variable
+	 *
+	 * @param string $classType
+	 */
+	public function setClassType($classType)
+	{
+		$this->_classType = $classType;
+	}
+
+	/**
+	 * Returns the PHP class associated to the variable
+	 *
+	 * @return string
+	 */
+	public function getClassType()
+	{
+		return $this->_classType;
+	}
+
+	/**
+	 * Sets the current dynamic type in a polimorphic variable
+	 *
+	 * @param string $type
+	 */
+	public function setDynamicType($type)
+	{
+		$this->_dynamicType = $type;
+	}
+
+	/**
+	 * Returns the current dynamic type in a polimorphic variable
+	 *
+	 * @return string
+	 */
+	public function getDynamicType()
+	{
+		return $this->_dynamicType;
 	}
 
 	/**
@@ -338,12 +442,40 @@ class Variable
 	}
 
 	/**
+	 * Separates variables before being updated
+	 *
+	 * @param \CompilationContext $compilationContext
+	 */
+	public function separate(CompilationContext $compilationContext)
+	{
+		if ($this->getName() != 'this_ptr' && $this->getName() != 'return_value') {
+			$compilationContext->codePrinter->output('ZEPHIR_SEPARATE(' . $this->getName() . ');');
+		}
+	}
+
+	/**
+	 * Skips variable initialization
+	 *
+	 * @param int $numberSkips
+	 */
+	public function skipInitVariant($numberSkips)
+	{
+		$this->_numberSkips += $numberSkips;
+	}
+
+	/**
 	 * Initializes a variant variable
 	 *
 	 * @param CompilationContext $compilationContext
 	 */
 	public function initVariant(CompilationContext $compilationContext)
 	{
+
+		if ($this->_numberSkips) {
+			$this->_numberSkips--;
+			return;
+		}
+
 		if ($this->getName() != 'this_ptr' && $this->getName() != 'return_value') {
 			$compilationContext->headersManager->add('kernel/memory');
 			if (!$this->isLocalOnly()) {
@@ -367,12 +499,54 @@ class Variable
 	}
 
 	/**
+	 * Initializes a variant variable that is intended to have the special
+	 * behavior of only freed its body value instead of the full variable
+	 *
+	 * @param CompilationContext $compilationContext
+	 */
+	public function initComplexLiteralVariant(CompilationContext $compilationContext)
+	{
+
+		if ($this->_numberSkips) {
+			$this->_numberSkips--;
+			return;
+		}
+
+		if ($this->getName() != 'this_ptr' && $this->getName() != 'return_value') {
+			$compilationContext->headersManager->add('kernel/memory');
+			if (!$this->isLocalOnly()) {
+				$compilationContext->symbolTable->mustGrownStack(true);
+				if ($this->_variantInits > 0 || $compilationContext->insideCycle) {
+					$this->_mustInitNull = true;
+					$compilationContext->codePrinter->output('ZEPHIR_INIT_LNVAR(' . $this->getName() . ');');
+				} else {
+					$compilationContext->codePrinter->output('ZEPHIR_INIT_VAR(' . $this->getName() . ');');
+				}
+			} else {
+				if ($this->_variantInits > 0 || $compilationContext->insideCycle) {
+					$this->_mustInitNull = true;
+					$compilationContext->codePrinter->output('ZEPHIR_SINIT_LNVAR(' . $this->getName() . ');');
+				} else {
+					$compilationContext->codePrinter->output('ZEPHIR_SINIT_VAR(' . $this->getName() . ');');
+				}
+			}
+			$this->_variantInits++;
+		}
+	}
+
+	/**
 	 * Observes a variable in the memory frame without initialization
 	 *
 	 * @param CompilationContext $compilationContext
 	 */
 	public function observeVariant(CompilationContext $compilationContext)
 	{
+
+		if ($this->_numberSkips) {
+			$this->_numberSkips--;
+			return;
+		}
+
 		if ($this->getName() != 'this_ptr' && $this->getName() != 'return_value') {
 			$compilationContext->headersManager->add('kernel/memory');
 			$compilationContext->symbolTable->mustGrownStack(true);

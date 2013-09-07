@@ -20,7 +20,7 @@
 /**
  * ClassDefinition
  *
- * Represents a class and their properties and methods
+ * Represents a class/interface and their properties and methods
  */
 class ClassDefinition
 {
@@ -31,18 +31,33 @@ class ClassDefinition
 
 	protected $_extendsClass;
 
+	protected $_extendsClassDefinition;
+
 	protected $_properties = array();
 
 	protected $_constants = array();
 
 	protected $_methods = array();
 
+	protected $_dependencyRank = 0;
+
+	/**
+	 * ClassDefinition
+	 *
+	 * @param string $namespace
+	 * @param string $name
+	 */
 	public function __construct($namespace, $name)
 	{
 		$this->_namespace = $namespace;
 		$this->_name = $name;
 	}
 
+	/**
+	 * Returns the class name without namespace
+	 *
+	 * @return string
+	 */
 	public function getName()
 	{
 		return $this->_name;
@@ -65,7 +80,73 @@ class ClassDefinition
 	 */
 	public function setExtendsClass($extendsClass)
 	{
+		if (substr($extendsClass, 0, 1) == '\\') {
+			$extendsClass = substr($extendsClass, 1);
+		}
 		$this->_extendsClass = $extendsClass;
+	}
+
+	/**
+	 * Returns the extended class
+	 *
+	 * @return string
+	 */
+	public function getExtendsClass()
+	{
+		return $this->_extendsClass;
+	}
+
+	/**
+	 * Sets the class definition for the extended class
+	 *
+	 * @param \ClassDefinition $classDefinition
+	 */
+	public function setExtendsClassDefinition($classDefinition)
+	{
+		$this->_extendsClassDefinition = $classDefinition;
+	}
+
+	/**
+	 * Returns the class definition related to the extended class
+	 *
+	 * @return \ClassDefinition
+	 */
+	public function getExtendsClassDefinition()
+	{
+		return $this->_extendsClassDefinition;
+	}
+
+	/**
+	 * Calculate the dependency rank of the class based on its dependencies
+	 *
+	 */
+	public function calculateDependencyRank()
+	{
+		if ($this->_extendsClassDefinition) {
+			$classDefinition = $this->_extendsClassDefinition;
+			if (method_exists($classDefinition, 'increaseDependencyRank')) {
+				$classDefinition->increaseDependencyRank();
+			}
+		}
+	}
+
+	/**
+	 * A class definition calls this method to mark this class as a dependency of another
+	 *
+	 */
+	public function increaseDependencyRank()
+	{
+		$this->_dependencyRank++;
+	}
+
+	/**
+	 * Returns the dependency rank for this class
+	 *
+	 * @return int
+	 */
+	public function getDependencyRank()
+	{
+		return $this->_dependencyRank;
 	}
 
 	/**
@@ -101,7 +182,18 @@ class ClassDefinition
 	 */
 	public function hasProperty($name)
 	{
-		return isset($this->_properties[$name]);
+		$exists = isset($this->_properties[$name]);
+		if ($exists) {
+			return true;
+		} else {
+			$extendsClassDefinition = $this->_extendsClassDefinition;
+			if ($extendsClassDefinition) {
+				if ($extendsClassDefinition->hasProperty($name)) {
+					return true;
+				}
+			}
+			return false;
+		}
 	}
 
 	/**
@@ -116,6 +208,9 @@ class ClassDefinition
 
 	/**
 	 * Adds a method to the class definition
+	 *
+	 * @param \ClassMethod $method
+	 * @param array $statement
 	 */
 	public function addMethod(ClassMethod $method, $statement=null)
 	{
@@ -127,6 +222,8 @@ class ClassDefinition
 
 	/**
 	 * Returns all properties defined in the class
+	 *
+	 * @return \ClassProperties[]
 	 */
 	public function getProperties()
 	{
@@ -135,6 +232,8 @@ class ClassDefinition
 
 	/**
 	 * Returns all constants defined in the class
+	 *
+	 * @return \ClassConstant[]
 	 */
 	public function getConstants()
 	{
@@ -164,6 +263,35 @@ class ClassDefinition
 				return true;
 			}
 		}
+		$extendsClassDefinition = $this->_extendsClassDefinition;
+		if ($extendsClassDefinition) {
+			if ($extendsClassDefinition->hasMethod($methodName)) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * Returns a method by its name
+	 *
+	 * @param string string
+	 * @return boolean
+	 */
+	public function getMethod($methodName)
+	{
+		foreach ($this->_methods as $name => $method) {
+			if (!strcasecmp($methodName, $name)) {
+				return $method;
+			}
+		}
+
+		$extendsClassDefinition = $this->_extendsClassDefinition;
+		if ($extendsClassDefinition) {
+			if ($extendsClassDefinition->hasMethod($methodName)) {
+				return $extendsClassDefinition->getMethod($methodName);
+			}
+		}
 		return false;
 	}
 
@@ -179,6 +307,8 @@ class ClassDefinition
 
 	/**
 	 * Returns a valid namespace to be used in C-sources
+	 *
+	 * @return string
 	 */
 	public function getCNamespace()
 	{
@@ -187,20 +317,29 @@ class ClassDefinition
 
 	/**
 	 * Returns a valid namespace to be used in C-sources
+	 *
+	 * @return string
 	 */
 	public function getNCNamespace()
 	{
 		return str_replace('\\', '\\\\', $this->_namespace);
 	}
 
-	public function getSCName()
+	/**
+	 * Class name without namespace prefix for class registration
+	 *
+	 * @param string $namespace
+	 * @return string
+	 */
+	public function getSCName($namespace)
 	{
-		return str_replace("test_", "", strtolower(str_replace('\\', '_', $this->_namespace) . '_' . $this->_name));
+		return str_replace($namespace . "_", "", strtolower(str_replace('\\', '_', $this->_namespace) . '_' . $this->_name));
 	}
 
 	/**
-	 * Compiles a class
+	 * Compiles a class/interface
 	 *
+	 * @param CompilationContext $compilationContext
 	 */
 	public function compile(CompilationContext $compilationContext)
 	{
@@ -217,22 +356,34 @@ class ClassDefinition
 		$codePrinter->increaseLevel();
 
 		/**
+		 * Method entry
+		 */
+		if (count($this->_methods)) {
+			$methodEntry = strtolower($this->getCNamespace()) . '_' . strtolower($this->getName()) . '_method_entry';
+		} else {
+			$methodEntry = 'NULL';
+		}
+
+		$namespace = $compilationContext->config->get('namespace');
+
+		/**
 		 * Register the class with extends + interfaces
 		 */
 		if ($this->_extendsClass) {
+
 			if (substr($this->_extendsClass, 0, 1) == '\\') {
 				$extendsClass = substr($this->_extendsClass, 1);
 			} else {
 				$extendsClass = $this->_extendsClass;
 			}
+			$extendsClass = str_replace("\\", "\\\\", $extendsClass);
+
 			$codePrinter->output('ZEPHIR_REGISTER_CLASS_EX(' . $this->getNCNamespace() . ', ' . $this->getName() . ', ' .
-				strtolower($this->getSCName()) . ', ' . '"' . strtolower($extendsClass) . '", ' .
-				strtolower($this->getCNamespace()) . '_' . strtolower($this->getName()) . '_method_entry, 0);');
+				strtolower($this->getSCName($namespace)) . ', ' . '"' . strtolower($extendsClass) . '", ' . $methodEntry . ', 0);');
 			$codePrinter->outputBlankLine();
 		} else {
 			$codePrinter->output('ZEPHIR_REGISTER_CLASS(' . $this->getNCNamespace() . ', ' . $this->getName() . ', ' .
-				strtolower($this->getSCName()) . ', ' . strtolower($this->getCNamespace()) . '_' .
-				strtolower($this->getName()) . '_method_entry, 0);');
+				strtolower($this->getSCName($namespace)) . ', ' . $methodEntry . ', 0);');
 			$codePrinter->outputBlankLine();
 		}
 
@@ -314,7 +465,7 @@ class ClassDefinition
 
 			$parameters = $method->getParameters();
 			if (count($parameters)) {
-				$codePrinter->output('ZEND_BEGIN_ARG_INFO_EX(arginfo_' . strtolower($this->getCNamespace() . '_' . $this->getName()) . '_' . $method->getName() . ', 0, 0, 0)');
+				$codePrinter->output('ZEND_BEGIN_ARG_INFO_EX(arginfo_' . strtolower($this->getCNamespace() . '_' . $this->getName() . '_' . $method->getName()) . ', 0, 0, 0)');
 				foreach ($parameters as $parameters) {
 					foreach ($parameters as $parameter) {
 						$codePrinter->output('	ZEND_ARG_INFO(0, ' . $parameter['name'] . ')');
@@ -326,17 +477,19 @@ class ClassDefinition
 
 		}
 
-		$codePrinter->output('ZEPHIR_INIT_FUNCS(' . strtolower($this->getCNamespace() . '_' . $this->getName()) . '_method_entry) {');
-		foreach ($methods as $method) {
-			$parameters = $method->getParameters();
-			if (count($parameters)) {
-				$codePrinter->output("\t" . 'PHP_ME(' . $this->getCNamespace() . '_' . $this->getName() . ', ' . $method->getName() . ', arginfo_' . strtolower($this->getCNamespace() . '_' . $this->getName()) . '_' . $method->getName() . ', ' . $method->getModifiers() . ')');
-			} else {
-				$codePrinter->output("\t" . 'PHP_ME(' . $this->getCNamespace() . '_' . $this->getName() . ', ' . $method->getName() . ', NULL, ' . $method->getModifiers() . ')');
+		if (count($methods)) {
+			$codePrinter->output('ZEPHIR_INIT_FUNCS(' . strtolower($this->getCNamespace() . '_' . $this->getName()) . '_method_entry) {');
+			foreach ($methods as $method) {
+				$parameters = $method->getParameters();
+				if (count($parameters)) {
+					$codePrinter->output("\t" . 'PHP_ME(' . $this->getCNamespace() . '_' . $this->getName() . ', ' . $method->getName() . ', arginfo_' . strtolower($this->getCNamespace() . '_' . $this->getName()) . '_' . $method->getName() . ', ' . $method->getModifiers() . ')');
+				} else {
+					$codePrinter->output("\t" . 'PHP_ME(' . $this->getCNamespace() . '_' . $this->getName() . ', ' . $method->getName() . ', NULL, ' . $method->getModifiers() . ')');
+				}
 			}
+			$codePrinter->output('	PHP_FE_END');
+			$codePrinter->output('};');
 		}
-		$codePrinter->output('	PHP_FE_END');
-		$codePrinter->output('};');
 
 		$compilationContext->headerPrinter = $codePrinter;
 	}

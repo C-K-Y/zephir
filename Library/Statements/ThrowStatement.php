@@ -40,19 +40,43 @@ class ThrowStatement
 
 		$compilationContext->headersManager->add('kernel/exception');
 
-		if ($compilationContext->compiler->isClass($statement['domain'])) {
+		$expr = $statement['expr'];
 
-			$classCe = strtolower(str_replace('\\', '_', $statement['domain'])) . '_ce';
-
-			if ($statement['parameters'][0]['type'] == 'string') {
-				$codePrinter->output('ZEPHIR_THROW_EXCEPTION_STR(' . $classCe . ', "' . $statement['parameters'][0]['value'] . '");');
-				$codePrinter->output('return;');
+		/**
+		 * This optimizes throw new Exception("hello")
+		 */
+		if (isset($expr['class'])) {
+			if (count($expr['parameters']) == 1) {
+				$className = $expr['class'];
+				if ($compilationContext->compiler->isClass($className)) {
+					if ($expr['parameters'][0]['type'] == 'string') {
+						$classDefinition = $compilationContext->compiler->getClassDefinition($className);
+						$codePrinter->output('ZEPHIR_THROW_EXCEPTION_STR(' . $classDefinition->getClassEntry() . ', "' . Utils::addSlaches($expr['parameters'][0]['value']) . '");');
+						$codePrinter->output('return;');
+						return;
+					}
+				}
 			}
-
-
 		}
 
-		//print_R();
+		$throwExpr = new Expression($expr);
+		$resolvedExpr = $throwExpr->compile($compilationContext);
+
+		if ($resolvedExpr->getType() != 'variable') {
+			throw new CompilerException("Expression '" . $resolvedExpr->getType . '" cannot be used as exception');
+		}
+
+		$variableVariable = $compilationContext->symbolTable->getVariableForRead($resolvedExpr->getCode(), $compilationContext, $expr);
+		if ($variableVariable->getType() != 'variable') {
+			throw new CompilerException("Variable '" . $variableVariable->getType() . "' cannot be used as exception", $expr);
+		}
+
+		$codePrinter->output('zephir_throw_exception(' . $variableVariable->getName() . ' TSRMLS_CC);');
+		$codePrinter->output('return;');
+
+		if ($variableVariable->isTemporal()) {
+			$variableVariable->setIdle(true);
+		}
 	}
 
 }

@@ -13,11 +13,17 @@
 
 #include "kernel/main.h"
 
+zend_class_entry *test_constantsparent_ce;
+zend_class_entry *test_scallparent_ce;
 zend_class_entry *test_arithmetic_ce;
 zend_class_entry *test_assign_ce;
 zend_class_entry *test_cast_ce;
 zend_class_entry *test_constants_ce;
 zend_class_entry *test_declare_ce;
+zend_class_entry *test_echoes_ce;
+zend_class_entry *test_exception_ce;
+zend_class_entry *test_exceptions_ce;
+zend_class_entry *test_fannkuch_ce;
 zend_class_entry *test_fcall_ce;
 zend_class_entry *test_fibonnaci_ce;
 zend_class_entry *test_flow_ce;
@@ -29,10 +35,12 @@ zend_class_entry *test_oo_oonoconstruct_ce;
 zend_class_entry *test_oo_ce;
 zend_class_entry *test_properties_protectedproperties_ce;
 zend_class_entry *test_properties_publicproperties_ce;
+zend_class_entry *test_regexdna_ce;
 zend_class_entry *test_router_exception_ce;
 zend_class_entry *test_router_route_ce;
 zend_class_entry *test_router_ce;
 zend_class_entry *test_scall_ce;
+zend_class_entry *test_spectralnorm_ce;
 
 ZEND_DECLARE_MODULE_GLOBALS(test)
 
@@ -41,11 +49,17 @@ PHP_MINIT_FUNCTION(test){
 	/** Init globals */
 	ZEND_INIT_MODULE_GLOBALS(test, php_test_init_globals, NULL);
 
+	ZEPHIR_INIT(Test_ConstantsParent);
+	ZEPHIR_INIT(Test_ScallParent);
 	ZEPHIR_INIT(Test_Arithmetic);
 	ZEPHIR_INIT(Test_Assign);
 	ZEPHIR_INIT(Test_Cast);
 	ZEPHIR_INIT(Test_Constants);
 	ZEPHIR_INIT(Test_Declare);
+	ZEPHIR_INIT(Test_Echoes);
+	ZEPHIR_INIT(Test_Exception);
+	ZEPHIR_INIT(Test_Exceptions);
+	ZEPHIR_INIT(Test_Fannkuch);
 	ZEPHIR_INIT(Test_Fcall);
 	ZEPHIR_INIT(Test_Fibonnaci);
 	ZEPHIR_INIT(Test_Flow);
@@ -57,10 +71,12 @@ PHP_MINIT_FUNCTION(test){
 	ZEPHIR_INIT(Test_Oo);
 	ZEPHIR_INIT(Test_Properties_ProtectedProperties);
 	ZEPHIR_INIT(Test_Properties_PublicProperties);
+	ZEPHIR_INIT(Test_RegexDNA);
 	ZEPHIR_INIT(Test_Router_Exception);
 	ZEPHIR_INIT(Test_Router_Route);
 	ZEPHIR_INIT(Test_Router);
 	ZEPHIR_INIT(Test_Scall);
+	ZEPHIR_INIT(Test_SpectralNorm);
 	return SUCCESS;
 }
 

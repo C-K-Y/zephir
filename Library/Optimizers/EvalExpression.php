@@ -67,6 +67,7 @@ class EvalExpression
 				}
 			}
 
+			/** @todo, read left variable from the symbol table */
 			switch ($expr['right']['value']) {
 				case 'array':
 					$condition = 'Z_TYPE_P(' . $expr['left']['left']['value'] . ') ' . $operator . ' IS_ARRAY';
@@ -80,8 +81,13 @@ class EvalExpression
 				case 'string':
 					$condition = 'Z_TYPE_P(' . $expr['left']['left']['value'] . ') ' . $operator . ' IS_STRING';
 					break;
+				case 'int':
+				case 'integer':
+				case 'long':
+					$condition = 'Z_TYPE_P(' . $expr['left']['left']['value'] . ') ' . $operator . ' IS_LONG';
+					break;
 				default:
-					echo $expr['right']['value'];
+					throw new CompilerException($expr['right']['value'], $expr['right']);
 			}
 
 			return $condition;
@@ -109,11 +115,16 @@ class EvalExpression
 			return $conditions;
 		}
 
-		//echo $exprRaw['type'], PHP_EOL;
-
 		$expr = new Expression($exprRaw);
 		$expr->setReadOnly(true);
 		$compiledExpression = $expr->compile($compilationContext);
+
+		/**
+		 * Possible corrupted expression?
+		 */
+		if (!is_object($compiledExpression)) {
+			throw new CompilerException('Corrupted expression: ' . $exprRaw['type'], $exprRaw);
+		}
 
 		/**
 		 * Generate the condition according to the value returned by the evaluted expression
@@ -154,7 +165,7 @@ class EvalExpression
 				}
 				break;
 			default:
-				throw new CompilerException("Expression can't be evaluated", $exprRaw);
+				throw new CompilerException("Expression " . $compiledExpression->getType() . " can't be evaluated", $exprRaw);
 		}
 	}
 

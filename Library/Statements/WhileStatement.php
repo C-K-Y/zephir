@@ -10,6 +10,7 @@
  | that is bundled with this package in the file LICENSE, and is        |
  | available through the world-wide-web at the following url:           |
  | http://www.zephir-lang.com/license                                   |
+ |                                                                      |
  | If you did not receive a copy of the Zephir license and are unable   |
  | to obtain it through the world-wide-web, please send a note to       |
  | license@zephir-lang.com so we can mail you a copy immediately.       |
@@ -39,25 +40,26 @@ class WhileStatement
 
 		$codePrinter = $compilationContext->codePrinter;
 
-		$numberPrints = $codePrinter->getNumberPrints();
-
-		$expr = new EvalExpression();
-		$condition = $expr->optimize($exprRaw, $compilationContext);
-
 		/**
 		 * Compound conditions can be evaluated in a single line of the C-code
 		 */
-		if (($codePrinter->getNumberPrints() - $numberPrints) == 0) {
-			$codePrinter->output('while (' . $condition . ') {');
-		} else {
-			$codePrinter->output('while (1) {');
-			$codePrinter->outputLineBreak();
-		}
+		$codePrinter->output('while (1) {');
+
+		$codePrinter->increaseLevel();
 
 		/**
 		 * Variables are initialized in a different way inside cycle
 		 */
 		$compilationContext->insideCycle++;
+
+		$expr = new EvalExpression();
+		$condition = $expr->optimize($exprRaw, $compilationContext);
+
+		$codePrinter->output('if (!(' . $condition . ')) {');
+		$codePrinter->output("\t" . 'break;');
+		$codePrinter->output('}');
+
+		$codePrinter->decreaseLevel();
 
 		/**
 		 * Compile statements in the 'while' block

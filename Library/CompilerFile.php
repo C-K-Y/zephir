@@ -20,7 +20,8 @@
 /**
  * CompilerFile
  *
- * This class represents every file compiled in a project compilation
+ * This class represents every file compiled in a project
+ * Every file may contain a class or an interface
  */
 class CompilerFile
 {
@@ -36,7 +37,15 @@ class CompilerFile
 	protected $_compiledFile;
 
 	/**
+	 * @var \ClassDefinition
+	 */
+	protected $_classDefinition;
+
+	/**
+	 * CompilerFile constructor
 	 *
+	 * @param string $className
+	 * @param string $filePath
 	 */
 	public function __construct($className, $filePath)
 	{
@@ -63,14 +72,31 @@ class CompilerFile
 	 */
 	public function genIR()
 	{
-		$compilePath = str_replace(DIRECTORY_SEPARATOR, '.', realpath($this->_filePath)) . ".js";
-		system(ZEPHIRPATH . '/bin/zephir-parser ' . realpath($this->_filePath) . ' > .temp/' . $compilePath);
-		return json_decode(file_get_contents(".temp/" . $compilePath), true);
+		$compilePath = '.temp/' . str_replace(DIRECTORY_SEPARATOR, '.', realpath($this->_filePath)) . ".js";
+		$zepRealPath = realpath($this->_filePath);
+		if (file_exists($compilePath)) {
+			if (filemtime($compilePath) < filemtime($zepRealPath)) {
+				system(ZEPHIRPATH . '/bin/zephir-parser ' . $zepRealPath . ' > ' . $compilePath);
+			}
+		} else {
+			system(ZEPHIRPATH . '/bin/zephir-parser ' . $zepRealPath . ' > ' . $compilePath);
+		}
+		return json_decode(file_get_contents($compilePath), true);
 	}
 
+	/**
+	 * Compiles the class/interface contained in the file
+	 *
+	 * @param \CompilationContext $compilationContext
+	 * @param string $namespace
+	 * @param string $topStatement
+	 */
 	public function compileClass(CompilationContext $compilationContext, $namespace, $topStatement)
 	{
 		$classDefinition = $this->_classDefinition;
+		if (!$classDefinition) {
+			return;
+		}
 
 		/**
 		 * Do the compilation
@@ -114,7 +140,20 @@ class CompilerFile
 	}
 
 	/**
-	 * Creates the definition
+	 * Creates a definition for an interface
+	 *
+	 * @param string $namespace
+	 * @param array $topStatement
+	 */
+	public function preCompileInterface($namespace, $topStatement)
+	{
+	}
+
+	/**
+	 * Creates a definition for a class
+	 *
+	 * @param string $namespace
+	 * @param array $topStatement
 	 */
 	public function preCompileClass($namespace, $topStatement)
 	{
@@ -168,13 +207,14 @@ class CompilerFile
 
 	/**
 	 *
+	 *
 	 */
 	public function preCompile()
 	{
 
 		$ir = $this->genIR();
 		if (!is_array($ir)) {
-			throw new Exception("Cannot parse file");
+			throw new Exception("Cannot parse file: " . realpath($this->_filePath));
 		}
 
 		if (isset($ir['type']) && $ir['type'] == 'error') {
@@ -235,18 +275,53 @@ class CompilerFile
 		$this->_ir = $ir;
 	}
 
-	public function  getCompiledFile()
+	/**
+	 * Returns the path to the compiled file
+	 *
+	 * @return string
+	 */
+	public function getCompiledFile()
 	{
 		return $this->_compiledFile;
+	}
+
+	/**
+	 * Check dependencies
+	 *
+	 * @param \Compiler $compiler
+	 * @param \Config $config
+	 * @param \Logger $logger
+	 */
+	public function checkDependencies(Compiler $compiler, Config $config, Logger $logger)
+	{
+		$classDefinition = $this->_classDefinition;
+		if (!$classDefinition) {
+			return;
+		}
+		$extendedClass = $classDefinition->getExtendsClass();
+		if ($extendedClass) {
+			if ($compiler->isClass($extendedClass)) {
+				$extendedDefinition = $compiler->getClassDefinition($extendedClass);
+				$classDefinition->setExtendsClassDefinition($extendedDefinition);
+			} else {
+				if ($compiler->isInternalClass($extendedClass)) {
+					$extendedDefinition = $compiler->getInternalClassDefinition($extendedClass);
+					$classDefinition->setExtendsClassDefinition($extendedDefinition);
+				} else {
+					throw new CompilerException('Cannot locate class "' . $extendedClass . '" when extending class "' . $classDefinition->getCompleteName() . '"');
+				}
+			}
+		}
 	}
 
 	/**
 	 * Compiles the file
 	 *
 	 * @param \Compiler $compiler
+	 * @param \Config $config
 	 * @param \Logger $logger
 	 */
-	public function compile(Compiler $compiler, Logger $logger)
+	public function compile(Compiler $compiler, Config $config, Logger $logger)
 	{
 
 		/**
@@ -258,6 +333,11 @@ class CompilerFile
 		 * Set global compiler in the compilation context
 		 */
 		$compilationContext->compiler = $compiler;
+
+		/**
+		 * Set global config in the compilation context
+		 */
+		$compilationContext->config = $config;
 
 		/**
 		 * Set global logger in the compilation context
@@ -279,11 +359,19 @@ class CompilerFile
 		$codePrinter->outputBlankLine();
 
 		$class = false;
+		$interface = false;
 		foreach ($this->_ir as $topStatement) {
 
 			switch ($topStatement['type']) {
 				case 'class':
-					if ($class) {
+					if ($interface || $class) {
+						throw new CompilerException("More than one class defined in the same file", $topStatement);
+					}
+					$class = true;
+					$this->compileClass($compilationContext, $this->_namespace, $topStatement);
+					break;
+				case 'interface':
+					if ($interface || $class) {
 						throw new CompilerException("More than one class defined in the same file", $topStatement);
 					}
 					$class = true;
@@ -295,13 +383,17 @@ class CompilerFile
 			}
 		}
 
-		$path = str_replace('\\', DIRECTORY_SEPARATOR, strtolower(preg_replace('#^test\\\\#i', '', $this->_compiledFilePath)));
+		$path = str_replace('\\', DIRECTORY_SEPARATOR, strtolower(preg_replace('#^' . $config->get('namespace') . '\\\\#i', '', $this->_compiledFilePath)));
 		if (!is_dir('ext/' . $path)) {
 			mkdir('ext/' . $path, 0777, true);
 		}
 
-		file_put_contents('ext/' . $path . '.c', $codePrinter->getOutput());
-		file_put_contents('ext/' . $path . '.h', $compilationContext->headerPrinter->getOutput());
+		if ($codePrinter) {
+			file_put_contents('ext/' . $path . '.c', $codePrinter->getOutput());
+			if ($compilationContext->headerPrinter) {
+				file_put_contents('ext/' . $path . '.h', $compilationContext->headerPrinter->getOutput());
+			}
+		}
 
 		/**
 		 * Add to file compiled
